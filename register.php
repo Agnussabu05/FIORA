@@ -67,12 +67,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <p style="color: var(--text-muted); margin-bottom: 30px;">Start organizing your life today.</p>
 
         <?php if($error): ?>
-            <div style="background: rgba(214,48,49,0.2); color: #ff7675; padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="background: rgba(239, 68, 68, 0.2); color: var(--danger); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
                 <?php echo $error; ?>
             </div>
         <?php endif; ?>
         <?php if($success): ?>
-            <div style="background: rgba(0, 184, 148, 0.2); color: #55efc4; padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="background: rgba(16, 185, 129, 0.2); color: var(--success); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
                 <?php echo $success; ?> <a href="login.php" style="color: white; font-weight: bold;">Login</a>
             </div>
         <?php endif; ?>

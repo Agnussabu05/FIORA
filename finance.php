@@ -131,21 +131,21 @@ foreach($chartData as $row) {
 
             <div class="finance-summary">
                 <div class="summary-card">
-                    <div class="icon-box" style="background: rgba(0, 184, 148, 0.2); color: var(--success);">💵</div>
+                    <div class="icon-box" style="background: rgba(107, 140, 115, 0.2); color: var(--success);">💵</div>
                     <div>
                         <div style="font-size: 0.9rem; color: var(--text-muted);">Income</div>
                         <div style="font-size: 1.5rem; font-weight: bold;">$<?php echo number_format($totalIncome, 2); ?></div>
                     </div>
                 </div>
                 <div class="summary-card">
-                    <div class="icon-box" style="background: rgba(214, 48, 49, 0.2); color: var(--danger);">📉</div>
+                    <div class="icon-box" style="background: rgba(192, 108, 108, 0.2); color: var(--danger);">📉</div>
                     <div>
                         <div style="font-size: 0.9rem; color: var(--text-muted);">Expenses</div>
                         <div style="font-size: 1.5rem; font-weight: bold;">$<?php echo number_format($totalExpense, 2); ?></div>
                     </div>
                 </div>
                 <div class="summary-card">
-                    <div class="icon-box" style="background: rgba(108, 99, 255, 0.2); color: var(--primary);">🏦</div>
+                    <div class="icon-box" style="background: rgba(34, 34, 34, 0.1); color: var(--primary);">🏦</div>
                     <div>
                         <div style="font-size: 0.9rem; color: var(--text-muted);">Balance</div>
                         <div style="font-size: 1.5rem; font-weight: bold;">$<?php echo number_format($balance, 2); ?></div>
@@ -161,7 +161,7 @@ foreach($chartData as $row) {
                             <?php foreach($transactions as $tx): ?>
                                 <div class="tx-item">
                                     <div style="display: flex; gap: 15px; align-items: center;">
-                                        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                        <div style="width: 40px; height: 40px; background: rgba(0,0,0,0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                                             <?php echo $tx['type'] == 'income' ? '💰' : '🛒'; ?>
                                         </div>
                                         <div>
@@ -288,7 +288,7 @@ foreach($chartData as $row) {
                     datasets: [{
                         data: data,
                         backgroundColor: [
-                            '#6C63FF', '#FF6584', '#00b894', '#fdcb6e', '#d63031', '#e17055', '#a29bfe'
+                            '#6B8C73', '#C06C6C', '#D9A066', '#9E9080', '#222222', '#5D4037', '#8D6E63'
                         ],
                         borderWidth: 0
                     }]
