@@ -48,7 +48,16 @@
                 <span>🎵</span> Music
             </a>
         </li>
+
         
+        <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+        <li class="nav-item">
+            <a href="admin/index.php" class="nav-link" style="color: var(--accent);">
+                <span>🛡️</span> Admin Panel
+            </a>
+        </li>
+        <?php endif; ?>
+
         <li class="nav-item" style="margin-top: 20px;">
             <a href="logout.php" class="nav-link" style="color: var(--danger);">
                 <span>🚪</span> Logout

@@ -11,21 +11,42 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $full_name = trim($_POST['full_name']);
     $username = trim($_POST['username']);
+    $email = trim($_POST['email']);
     $password = $_POST['password'];
+    $confirm_password = $_POST['confirm_password'];
 
-    if (empty($username) || empty($password)) {
+    if (empty($full_name) || empty($username) || empty($email) || empty($password)) {
         $error = "Please fill in all fields.";
+    } elseif ($password !== $confirm_password) {
+        $error = "Passwords do not match.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Invalid email format.";
     } else {
-        // Check if user exists
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
-        $stmt->execute([$username]);
+        // Check if username or email exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+        $stmt->execute([$username, $email]);
         if ($stmt->fetch()) {
-            $error = "Username already taken.";
+            $error = "Username or Email already taken.";
         } else {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)");
-            if ($stmt->execute([$username, $hash])) {
+            $stmt = $pdo->prepare("INSERT INTO users (username, full_name, email, password_hash) VALUES (?, ?, ?, ?)");
+            if ($stmt->execute([$username, $full_name, $email, $hash])) {
+                $new_user_id = $pdo->lastInsertId();
+                
+                // Assign Global Defaults
+                $defaults = $pdo->query("SELECT * FROM system_defaults")->fetchAll();
+                foreach ($defaults as $d) {
+                    if ($d['type'] === 'task') {
+                        $p_stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, priority, is_admin_pushed) VALUES (?, ?, ?, ?, 1)");
+                        $p_stmt->execute([$new_user_id, $d['title'], $d['description'], $d['priority']]);
+                    } else {
+                        $p_stmt = $pdo->prepare("INSERT INTO habits (user_id, name, is_admin_pushed) VALUES (?, ?, 1)");
+                        $p_stmt->execute([$new_user_id, $d['title']]);
+                    }
+                }
+                
                 $success = "Account created! You can now login.";
             } else {
                 $error = "Something went wrong.";
@@ -79,10 +100,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" action="">
             <div class="form-group">
-                <input type="text" name="username" class="form-input" placeholder="Choose Username" required>
+                <input type="text" name="full_name" class="form-input" placeholder="Full Name" required>
             </div>
             <div class="form-group">
-                <input type="password" name="password" class="form-input" placeholder="Choose Password" required>
+                <input type="text" name="username" class="form-input" placeholder="Username" required>
+            </div>
+            <div class="form-group">
+                <input type="email" name="email" class="form-input" placeholder="Email Address" required>
+            </div>
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <input type="password" name="password" class="form-input" placeholder="Password" required>
+                <input type="password" name="confirm_password" class="form-input" placeholder="Confirm Password" required>
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Sign Up</button>
         </form>

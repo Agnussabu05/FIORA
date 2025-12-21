@@ -7,9 +7,24 @@ $page = 'habits';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add') {
     $name = $_POST['name'];
     $frequency = $_POST['frequency'];
-    // Default user_id = $user_id
-    $stmt = $pdo->prepare("INSERT INTO habits (user_id, name, frequency) VALUES (?, ?, ?)");
-    $stmt->execute([$user_id, $name, $frequency]);
+    $is_global = isset($_POST['is_global']) && ($_SESSION['role'] ?? '') === 'admin';
+    
+    if ($is_global) {
+        // Push to ALL users
+        $users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $pdo->prepare("INSERT INTO habits (user_id, name, frequency, is_admin_pushed) VALUES (?, ?, ?, 1)");
+        foreach ($users as $u_id) {
+            $stmt->execute([$u_id, $name, $frequency]);
+        }
+        
+        // Also add to system_defaults for future users
+        $def_stmt = $pdo->prepare("INSERT INTO system_defaults (type, title) VALUES ('habit', ?)");
+        $def_stmt->execute([$name]);
+    } else {
+        // Just for current user
+        $stmt = $pdo->prepare("INSERT INTO habits (user_id, name, frequency) VALUES (?, ?, ?)");
+        $stmt->execute([$user_id, $name, $frequency]);
+    }
     header("Location: habits.php");
     exit;
 }
@@ -34,8 +49,8 @@ if (isset($_GET['checkin'])) {
 
 if (isset($_GET['delete'])) {
     $id = $_GET['delete'];
-    $stmt = $pdo->prepare("DELETE FROM habits WHERE id = ?");
-    $stmt->execute([$id]);
+    $stmt = $pdo->prepare("DELETE FROM habits WHERE id = ? AND user_id = ?");
+    $stmt->execute([$id, $user_id]);
     header("Location: habits.php");
     exit;
 }
@@ -173,6 +188,12 @@ $todaysLogs = $logStmt->fetchAll(PDO::FETCH_COLUMN);
                         <option value="weekly">Weekly</option>
                     </select>
                 </div>
+                <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                        <input type="checkbox" name="is_global" id="is_global_habit" style="width: 18px; height: 18px;">
+                        <label for="is_global_habit" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--secondary);">✨ Push as Global Habit (All Users)</label>
+                    </div>
+                <?php endif; ?>
                 <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Start Tracking</button>

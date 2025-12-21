@@ -9,9 +9,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $desc = $_POST['description'];
     $deadline = $_POST['deadline'];
     $priority = $_POST['priority'];
-    // Default user_id = $user_id
-    $stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, deadline, priority) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$user_id, $title, $desc, $deadline, $priority]);
+    $is_global = isset($_POST['is_global']) && ($_SESSION['role'] ?? '') === 'admin';
+    
+    if ($is_global) {
+        // Push to ALL existing users
+        $users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        $stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, deadline, priority, is_admin_pushed) VALUES (?, ?, ?, ?, ?, 1)");
+        foreach ($users as $u_id) {
+            $stmt->execute([$u_id, $title, $desc, $deadline, $priority]);
+        }
+        
+        // Also add to system_defaults for future users
+        $def_stmt = $pdo->prepare("INSERT INTO system_defaults (type, title, description, priority) VALUES ('task', ?, ?, ?)");
+        $def_stmt->execute([$title, $desc, $priority]);
+    } else {
+        // Just for current user
+        $stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, deadline, priority) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, $title, $desc, $deadline, $priority]);
+    }
+    
     header("Location: tasks.php");
     exit;
 }
@@ -111,8 +127,11 @@ $tasks = $stmt->fetchAll();
                                     <?php endif; ?>
                                     
                                     <div>
-                                        <div style="font-weight: 600;">
+                                        <div style="font-weight: 600; display: flex; align-items: center; gap: 8px;">
                                             <?php echo htmlspecialchars($task['title']); ?>
+                                            <?php if ($task['is_admin_pushed']): ?>
+                                                <span title="Pushed by Admin" style="font-size: 0.65rem; background: var(--secondary); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700;">🛡️ ADMIN</span>
+                                            <?php endif; ?>
                                         </div>
                                         <div style="font-size: 0.8rem; color: var(--text-muted);">
                                             <span class="priority-dot p-<?php echo $task['priority']; ?>"></span>
@@ -157,6 +176,12 @@ $tasks = $stmt->fetchAll();
                         <option value="high">High</option>
                     </select>
                 </div>
+                <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                        <input type="checkbox" name="is_global" id="is_global" style="width: 18px; height: 18px;">
+                        <label for="is_global" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: var(--secondary);">✨ Push as Global Task (All Users)</label>
+                    </div>
+                <?php endif; ?>
                 <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Task</button>
