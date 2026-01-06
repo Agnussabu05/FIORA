@@ -148,7 +148,7 @@ $personal_music = $stmt->fetchAll();
                 <input type="text" name="playlist_name" class="form-input" style="width: 100%; margin-bottom: 20px;" placeholder="Playlist Name (e.g. My Focus)">
                 <div style="display: flex; gap: 10px;">
                     <button type="submit" name="add_personal" class="btn btn-primary" style="flex: 1;">Add Track</button>
-                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('addModal').style.display='none'">Cancel</button>
+                    <button type="button" class="btn btn-secondary" style="flex: 1; color: #000 !important; font-weight: 800;" onclick="document.getElementById('addModal').style.display='none'">Cancel</button>
                 </div>
             </form>
         </div>

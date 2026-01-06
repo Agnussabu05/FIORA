@@ -98,24 +98,158 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <form method="POST" action="">
+        <form method="POST" action="" id="registerForm">
             <div class="form-group">
                 <input type="text" name="full_name" class="form-input" placeholder="Full Name" required>
             </div>
             <div class="form-group">
-                <input type="text" name="username" class="form-input" placeholder="Username" required>
+                <input type="text" name="username" id="username" class="form-input" placeholder="Username" required>
+                <div id="username-feedback" class="feedback-msg"></div>
             </div>
             <div class="form-group">
-                <input type="email" name="email" class="form-input" placeholder="Email Address" required>
+                <input type="email" name="email" id="email" class="form-input" placeholder="Email Address" required>
+                <div id="email-feedback" class="feedback-msg"></div>
             </div>
             <div class="form-group" style="display: flex; gap: 10px;">
-                <input type="password" name="password" class="form-input" placeholder="Password" required>
-                <input type="password" name="confirm_password" class="form-input" placeholder="Confirm Password" required>
+                <input type="password" name="password" id="password" class="form-input" placeholder="Password" required>
+                <input type="password" name="confirm_password" id="confirm_password" class="form-input" placeholder="Confirm Password" required>
             </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Sign Up</button>
+            <div id="password-feedback" class="feedback-msg" style="margin-top: -10px; margin-bottom: 20px;"></div>
+            <button type="submit" id="submitBtn" class="btn btn-primary" style="width: 100%;">Sign Up</button>
         </form>
 
         <a href="login.php" class="auth-link">Already use Fiora? Login</a>
     </div>
+
+    <script>
+        const usernameInput = document.getElementById('username');
+        const emailInput = document.getElementById('email');
+        const usernameFeedback = document.getElementById('username-feedback');
+        const emailFeedback = document.getElementById('email-feedback');
+        const passwordInput = document.getElementById('password');
+        const confirmInput = document.getElementById('confirm_password');
+        const passwordFeedback = document.getElementById('password-feedback');
+        const submitBtn = document.getElementById('submitBtn');
+
+        let usernameValid = false;
+        let emailValid = false;
+        let passwordValid = false;
+        let confirmValid = false;
+
+        async function checkAvailability(type, value, feedbackElement) {
+            if (!value) {
+                feedbackElement.innerText = '';
+                return false;
+            }
+
+            feedbackElement.innerText = 'Checking...';
+            feedbackElement.style.color = 'var(--text-muted)';
+
+            try {
+                const response = await fetch(`api/check_user.php?${type}=${encodeURIComponent(value)}`);
+                const data = await response.json();
+
+                if (data.available) {
+                    feedbackElement.innerText = ''; // Don't show success message
+                    // feedbackElement.style.color = 'var(--success)';
+                    return true;
+                } else {
+                    feedbackElement.innerText = '✗ ' + data.message;
+                    feedbackElement.style.color = 'var(--danger)';
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error checking availability:', error);
+                return true; 
+            }
+        }
+
+        function validatePasswordMatch() {
+            const password = passwordInput.value;
+            const confirm = confirmInput.value;
+
+            // Length Check
+            if (password.length < 6) {
+                passwordFeedback.innerText = '⚠️ Password must be at least 6 characters';
+                passwordFeedback.style.color = 'var(--text-muted)'; // Warning color
+                passwordValid = false;
+            } else {
+                passwordValid = true;
+            }
+
+            if (confirm === '') {
+                if (passwordValid) passwordFeedback.innerText = ''; 
+                confirmValid = false;
+                updateSubmitButton();
+                return;
+            }
+
+            if (password !== confirm) {
+                passwordFeedback.innerText = '✗ Passwords do not match';
+                passwordFeedback.style.color = 'var(--danger)';
+                confirmValid = false;
+            } else {
+                passwordFeedback.innerText = ''; // Don't show success message, just clear error
+                // passwordFeedback.style.color = 'var(--success)';
+                confirmValid = true;
+            }
+            updateSubmitButton();
+        }
+
+        let debounceTimer;
+        usernameInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                usernameValid = await checkAvailability('username', usernameInput.value, usernameFeedback);
+                updateSubmitButton();
+            }, 500);
+        });
+
+        emailInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                const email = emailInput.value;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+                if (!emailRegex.test(email)) {
+                    emailFeedback.innerText = '⚠️ Invalid email format';
+                    emailFeedback.style.color = 'var(--text-muted)';
+                    emailValid = false;
+                    updateSubmitButton();
+                    return;
+                }
+
+                emailValid = await checkAvailability('email', email, emailFeedback);
+                updateSubmitButton();
+            }, 500);
+        });
+
+        passwordInput.addEventListener('input', validatePasswordMatch);
+        confirmInput.addEventListener('input', validatePasswordMatch);
+
+        function updateSubmitButton() {
+            if (usernameValid && emailValid && passwordValid && confirmValid) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.innerText = 'Sign Up';
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.7';
+                submitBtn.innerText = 'Please Fix Errors';
+            }
+        }
+        
+        // Initial state
+        updateSubmitButton();
+    </script>
+    <style>
+        .feedback-msg {
+            font-size: 0.75rem;
+            text-align: left;
+            margin-top: 4px;
+            padding-left: 5px;
+            height: 1rem;
+        }
+    </style>
 </body>
 </html>

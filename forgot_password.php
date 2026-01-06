@@ -12,10 +12,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($identifier)) {
         $error = "Please enter your username or email.";
     } else {
-        // Find user
-        $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? OR email = ?");
-        $stmt->execute([$identifier, $identifier]);
-        $user = $stmt->fetch();
+        // Check DB connection
+        if (!$pdo) {
+            $error = "Database unavailable. Please try again later.";
+        } else {
+            // Find user
+            $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? OR email = ?");
+            $stmt->execute([$identifier, $identifier]);
+            $user = $stmt->fetch();
+        }
 
         if ($user) {
             // Generate secure token
@@ -46,6 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 // Server settings
+                $mail->SMTPDebug = 0; // Disable debug output
+                // $mail->Debugoutput = 'html'; 
                 $mail->isSMTP();
                 $mail->Host       = SMTP_HOST;
                 $mail->SMTPAuth   = true;
@@ -53,6 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $mail->Password   = SMTP_PASS;
                 $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
                 $mail->Port       = SMTP_PORT;
+
+                // Timeout and Options (might help with authentication lag)
+                $mail->Timeout = 10;
+                $mail->getSMTPInstance()->Timelimit = 10;
 
                 // Recipients
                 $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
@@ -78,7 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "A password reset link has been sent to your email address.";
                 $reset_link = ''; // Hide link from UI since it's emailed
             } catch (Exception $e) {
-                $error = "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
+                // Return a cleaner message but log details if possible
+                $error = "Message could not be sent. Please check your internet connection or email settings.";
+                // For direct debugging, you can uncomment the line below:
+                // $error .= " Mailer Error: {$mail->ErrorInfo}";
             }
         } else {
             // Security best practice: don't reveal if user exists. 

@@ -3,7 +3,7 @@
 define('SMTP_HOST', 'smtp.gmail.com');
 define('SMTP_PORT', 587); // For TLS
 define('SMTP_USER', 'agnussabu2028@mca.ajce.in');
-define('SMTP_PASS', 'ooum ycnj nkoa rhqg'); // Google App Password
+define('SMTP_PASS', 'cygl tqgx yjbn mqea'); // Google App Password
 define('SMTP_FROM_EMAIL', 'agnussabu2028@mca.ajce.in');
 define('SMTP_FROM_NAME', 'FIORA Support');
 
