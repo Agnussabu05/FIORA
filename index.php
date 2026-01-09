@@ -4,6 +4,13 @@ require_once 'includes/auth.php'; // Enforce login
 
 $username = $_SESSION['username'] ?? 'User';
 $user_id = $_SESSION['user_id'];
+
+// Admin Redirect: If user is admin, go straight to Admin Dashboard
+if (($role ?? $_SESSION['role'] ?? '') === 'admin') {
+    header("Location: admin/index.php");
+    exit;
+}
+
 $page = 'dashboard';
 
 // Fetch Notifications

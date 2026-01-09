@@ -30,8 +30,18 @@ $charts = [
 try {
     // Basic Counts
     $stats['users'] = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-    $stats['tasks'] = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-    $stats['habits'] = $pdo->query("SELECT COUNT(*) FROM habits")->fetchColumn();
+
+    // Expanded Stats
+    $stats['tasks_total'] = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
+    $stats['tasks_pending'] = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'pending'")->fetchColumn();
+    $stats['tasks_completed'] = $stats['tasks_total'] - $stats['tasks_pending'];
+
+    $stats['habits_total'] = $pdo->query("SELECT COUNT(*) FROM habits")->fetchColumn();
+    // Active habits: logged in last 7 days
+    $active_habits_count = $pdo->query("SELECT COUNT(DISTINCT habit_id) FROM habit_logs WHERE check_in_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")->fetchColumn();
+    $stats['habits_active'] = $active_habits_count;
+    $stats['habits_inactive'] = $stats['habits_total'] - $active_habits_count;
+
     $stats['expenses'] = $pdo->query("SELECT COUNT(*) FROM expenses")->fetchColumn();
     
     // Study Hours
@@ -50,6 +60,7 @@ try {
         ) as activity
     ";
     $stats['active_today'] = $pdo->query($sql_active_today)->fetchColumn();
+    
 
     // Active Users (This Week)
     $week_start = date('Y-m-d', strtotime('monday this week'));
@@ -119,8 +130,60 @@ try {
     }
     $charts['mood'] = $mood_data;
 
+    // --- Users Report Logic (Consolidated) ---
+    $search = $_GET['search'] ?? '';
+    $params = [];
+    $user_query = "
+        SELECT 
+            u.id, 
+            u.username, 
+            u.role, 
+            u.created_at,
+            COUNT(t.id) as total_tasks,
+            SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
+        FROM users u
+        LEFT JOIN tasks t ON u.id = t.user_id
+    ";
+    if ($search) {
+        $user_query .= " WHERE u.username LIKE ?";
+        $params[] = "%$search%";
+    }
+    $user_query .= " GROUP BY u.id, u.username, u.role, u.created_at";
+    $user_query .= " ORDER BY u.created_at DESC";
+    
+    $stmt = $pdo->prepare($user_query);
+    $stmt->execute($params);
+    $users_report = $stmt->fetchAll();
+
+    // --- Users Report Logic (Consolidated) ---
+    $search = $_GET['search'] ?? '';
+    $params = [];
+    $user_query = "
+        SELECT 
+            u.id, 
+            u.username, 
+            u.role, 
+            u.created_at,
+            COUNT(t.id) as total_tasks,
+            SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
+        FROM users u
+        LEFT JOIN tasks t ON u.id = t.user_id
+    ";
+    if ($search) {
+        $user_query .= " WHERE u.username LIKE ?";
+        $params[] = "%$search%";
+    }
+    $user_query .= " GROUP BY u.id, u.username, u.role, u.created_at";
+    $user_query .= " ORDER BY u.created_at DESC";
+    
+    $stmt = $pdo->prepare($user_query);
+    $stmt->execute($params);
+    $users_report = $stmt->fetchAll();
+
 } catch (PDOException $e) {
     // Handle error gracefully
+    error_log("Dashboard Error: " . $e->getMessage());
+    $error = "Unable to load dashboard statistics.";
 }
 
 $page = 'dashboard';
@@ -135,6 +198,12 @@ $page = 'dashboard';
     <link rel="stylesheet" href="../assets/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Animations */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -142,38 +211,49 @@ $page = 'dashboard';
             margin-bottom: 32px;
         }
         .stat-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.6); /* Slightly more opaque for better contrast */
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
             padding: 24px;
             border-radius: 20px;
             display: flex;
             align-items: center;
             gap: 20px;
-            transition: transform 0.2s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: fadeInUp 0.6s ease-out forwards;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); /* Soft shadow */
         }
         .stat-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-5px) scale(1.02);
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
         }
         .stat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.5rem;
-            background: rgba(255, 255, 255, 0.1);
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); /* Subtle metallic gradient default */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         }
         .stat-info h3 {
             margin: 0;
             font-size: 1.8rem;
-            font-weight: 700;
+            font-weight: 800; /* Bolder */
+            background: linear-gradient(45deg, #2d3748, #4a5568);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .stat-info p {
-            margin: 0;
-            color: var(--text-muted);
-            font-size: 0.9rem;
+            margin: 4px 0 0;
+            color: #718096;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
         
         /* Charts Section */
@@ -184,26 +264,45 @@ $page = 'dashboard';
             margin-bottom: 32px;
         }
         .chart-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
             padding: 24px;
             border-radius: 20px;
-            /* Remove min-height to allow more compact layout */
+            animation: fadeInUp 0.6s ease-out forwards 0.2s; /* Delayed animation */
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        .chart-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px rgba(0,0,0,0.08);
         }
         .chart-container {
             position: relative;
-            height: 220px; /* Reduced from default expansion */
+            height: 250px; /* Slightly taller */
             width: 100%;
         }
         .chart-header {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .chart-header h3 {
             margin: 0;
-            font-size: 1.1rem;
-            color: var(--text-color);
+            font-size: 1.2rem;
+            color: #2d3748;
+            font-weight: 700;
         }
+        /* Icon Gradients */
+        .icon-blue { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); color: #fff; }
+        .icon-orange { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #fff; }
+        .icon-green { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); color: #fff; } /* actually tealish */
+        .icon-pink { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); color: #fff; }
+        .icon-purple { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); color: #fff; }
+        .icon-gold { background: linear-gradient(135deg, #fccb90 0%, #d57eeb 100%); color: #fff; }
+        .icon-cyan { background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); color: #fff; }
+
     </style>
 </head>
 <body>
@@ -213,66 +312,70 @@ $page = 'dashboard';
         <main class="main-content">
             <header class="top-bar">
                 <div class="welcome-section">
-                    <h1>Admin Dashboard</h1>
+                    <h1 style="background: linear-gradient(to right, #222, #555); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Admin Dashboard</h1>
                     <p>System health overview & user statistics.</p>
                 </div>
             </header>
 
             <div class="content-wrapper">
                 
-                <!-- Stats Row 1 -->
+                <!-- User Metrics Row -->
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-icon">👥</div>
+                        <div class="stat-icon icon-blue">👥</div>
                         <div class="stat-info">
                             <h3><?php echo number_format($stats['users']); ?></h3>
                             <p>Total Users</p>
                         </div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">⚡</div>
+                        <div class="stat-icon icon-orange">⚡</div>
                         <div class="stat-info">
-                            <h3><?php echo $stats['active_today']; ?> / <?php echo $stats['active_week']; ?></h3>
-                            <p>Active (Today / Week)</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">✅</div>
-                        <div class="stat-info">
-                            <h3><?php echo number_format($stats['tasks']); ?></h3>
-                            <p>Tasks Created</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🔥</div>
-                        <div class="stat-info">
-                            <h3><?php echo number_format($stats['habits']); ?></h3>
-                            <p>Habits Tracked</p>
+                            <h3><?php echo $stats['active_today']; ?> <span style="font-size:0.6em; color:var(--text-muted)">Today</span> / <?php echo $stats['active_week']; ?> <span style="font-size:0.6em; color:var(--text-muted)">Week</span></h3>
+                            <p>Active Users</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Stats Row 2 -->
+                <!-- Feature Usage Row -->
                  <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-icon">💸</div>
+                        <div class="stat-icon icon-green">✅</div>
                         <div class="stat-info">
-                            <h3><?php echo number_format($stats['expenses']); ?></h3>
-                            <p>Expenses Logged</p>
+                            <h3><?php echo number_format($stats['tasks_pending']); ?> <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">/ <?php echo number_format($stats['tasks_completed']); ?></span></h3>
+                            <p>Tasks (Pending / Completed)</p>
                         </div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">📚</div>
+                        <div class="stat-icon icon-pink">🔥</div>
                         <div class="stat-info">
-                            <h3><?php echo $stats['study_hours']; ?>h</h3>
-                            <p>Study Hours Logged</p>
+                            <h3><?php echo number_format($stats['habits_active']); ?> <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">/ <?php echo number_format($stats['habits_inactive']); ?></span></h3>
+                            <p>Habits (Active / Inactive)</p>
                         </div>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-icon icon-gold">💸</div>
+                        <div class="stat-info">
+                            <h3><?php echo number_format($stats['expenses']); ?></h3>
+                            <p>Total Expense Transactions</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon icon-purple">📚</div>
+                        <div class="stat-info">
+                            <h3><?php echo $stats['study_hours']; ?>h</h3>
+                            <p>Total Study Hours</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Row -->
+                <div class="stats-grid">
                      <div class="stat-card">
-                        <div class="stat-icon">🤖</div>
+                        <div class="stat-icon icon-cyan">🤖</div>
                         <div class="stat-info">
                             <h3><?php echo $stats['ai_usage']; ?></h3>
-                            <p>AI Assistant Usage</p>
+                            <p>AI Queries Made</p>
                         </div>
                     </div>
                 </div>
@@ -320,14 +423,68 @@ $page = 'dashboard';
                     </div>
                 </div>
 
+                <!-- User Report Section -->
+                <div class="glass-card" style="margin-bottom: 40px; overflow-x: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>User Reports</h3>
+                        <form method="GET" style="display: flex; gap: 10px;">
+                            <input type="text" name="search" placeholder="Search users..." value="<?php echo htmlspecialchars($search); ?>" 
+                                   style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1); background: rgba(255,255,255,0.2);">
+                            <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">Search</button>
+                        </form>
+                    </div>
+                    
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.1);">
+                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">User</th>
+                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Role</th>
+                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Progress</th>
+                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Joined</th>
+                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($users_report as $u): 
+                                $total = $u['total_tasks'] ?: 0;
+                                $completed = $u['completed_tasks'] ?: 0;
+                                $percent = $total > 0 ? round(($completed / $total) * 100) : 0;
+                            ?>
+                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                <td style="padding: 12px; font-weight: 500;">
+                                    <?php echo htmlspecialchars($u['username']); ?>
+                                </td>
+                                <td style="padding: 12px;">
+                                    <span style="background: <?php echo $u['role'] === 'admin' ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)'; ?>; 
+                                                 color: <?php echo $u['role'] === 'admin' ? '#4F46E5' : '#10B981'; ?>; 
+                                                 padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+                                        <?php echo ucfirst($u['role'] ?? 'user'); ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 12px; width: 200px;">
+                                    <div style="background: rgba(0,0,0,0.1); border-radius: 10px; height: 8px; width: 100%; overflow: hidden;">
+                                        <div style="background: #4facfe; height: 100%; width: <?php echo $percent; ?>%;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;"><?php echo $percent; ?>%</div>
+                                </td>
+                                <td style="padding: 12px; color: var(--text-muted);"><?php echo date('M j, Y', strtotime($u['created_at'])); ?></td>
+                                <td style="padding: 12px;">
+                                    <a href="user_details.php?id=<?php echo $u['id']; ?>" class="btn btn-primary" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem; border-radius: 8px;">View Details</a>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
             </div>
         </main>
     </div>
 
     <script>
         // Common Chart Defaults
-        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
-        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+        Chart.defaults.color = 'rgba(0, 0, 0, 0.7)';
+        Chart.defaults.borderColor = 'rgba(0, 0, 0, 0.1)';
         
         // 1. User Activity Chart
         const activityCtx = document.getElementById('activityChart').getContext('2d');

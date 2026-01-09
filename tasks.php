@@ -205,13 +205,13 @@ $tasks = $stmt->fetchAll();
                 <input type="hidden" name="action" value="add">
                 
                 <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" name="title" class="form-input" required placeholder="What needs to be done?">
+                    <label>Title <span style="color: #ef4444;">*</span></label>
+                    <input type="text" name="title" id="task-title" class="form-input" required placeholder="What needs to be done?">
                 </div>
 
                 <div class="form-group">
-                    <label>Category</label>
-                    <select name="category" class="form-input">
+                    <label>Category <span style="color: #ef4444;">*</span></label>
+                    <select name="category" id="task-category" class="form-input" required>
                         <option value="Personal">Personal</option>
                         <option value="Work">Work</option>
                         <option value="Health">Health</option>
@@ -219,13 +219,17 @@ $tasks = $stmt->fetchAll();
                 </div>
 
                 <div class="form-group">
-                    <label>Deadline</label>
-                    <input type="datetime-local" name="deadline" class="form-input" required>
+                    <label>Deadline <span style="color: #ef4444;">*</span></label>
+                    <input type="datetime-local" name="deadline" id="task-deadline" class="form-input" required>
                 </div>
 
                 <div class="form-group">
                     <label>Description (Optional)</label>
                     <textarea name="description" class="form-input" rows="3" placeholder="Additional details..."></textarea>
+                </div>
+
+                <div style="font-size: 0.85rem; color: #666; margin-top: 15px; margin-bottom: 10px;">
+                    <span style="color: #ef4444;">*</span> These fields are compulsory
                 </div>
 
                 <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 25px;">
@@ -249,6 +253,72 @@ $tasks = $stmt->fetchAll();
         document.getElementById('taskModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('taskModal')) closeModal();
         });
+
+        // Form Validation
+        const titleInput = document.querySelector('#task-title');
+        const deadlineInput = document.querySelector('#task-deadline');
+        const categoryInput = document.querySelector('#task-category');
+        
+        if (titleInput) {
+            titleInput.addEventListener('blur', function() {
+                validateField(this);
+            });
+            titleInput.addEventListener('input', function() {
+                if(this.value.trim() !== '') {
+                    clearError(this);
+                }
+            });
+        }
+
+        if (deadlineInput) {
+            deadlineInput.addEventListener('blur', function() {
+                validateField(this);
+            });
+            deadlineInput.addEventListener('change', function() {
+                if(this.value !== '') {
+                    clearError(this);
+                }
+            });
+        }
+
+        if (categoryInput) {
+            categoryInput.addEventListener('blur', function() {
+                validateField(this);
+            });
+            categoryInput.addEventListener('change', function() {
+                if(this.value !== '') {
+                    clearError(this);
+                }
+            });
+        }
+
+        function validateField(field) {
+            const existingError = field.parentNode.querySelector('.error-message');
+            
+            if (field.value.trim() === '') {
+                if (!existingError) {
+                    const error = document.createElement('div');
+                    error.className = 'error-message';
+                    error.style.color = '#ef4444';
+                    error.style.fontSize = '0.85rem';
+                    error.style.marginTop = '5px';
+                    error.style.fontWeight = '600';
+                    error.innerText = 'This field is compulsory';
+                    field.parentNode.appendChild(error);
+                    field.style.borderColor = '#ef4444';
+                }
+            } else {
+                clearError(field);
+            }
+        }
+
+        function clearError(field) {
+            const existingError = field.parentNode.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+                field.style.borderColor = '';
+            }
+        }
     </script>
 </body>
 </html>

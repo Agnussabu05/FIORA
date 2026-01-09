@@ -142,7 +142,7 @@ $page = 'defaults';
                             </div>
                             <div style="margin-bottom: 15px;">
                                 <label style="display:block; margin-bottom:5px;">Title</label>
-                                <input type="text" name="title" class="form-input" style="width: 100%;" required>
+                                <input type="text" name="title" id="default-title" class="form-input" style="width: 100%;" required>
                             </div>
                             <div id="task-fields">
                                 <div style="margin-bottom: 15px;">
@@ -194,6 +194,45 @@ $page = 'defaults';
     <script>
         function toggleTaskFields(type) {
             document.getElementById('task-fields').style.display = (type === 'task') ? 'block' : 'none';
+        }
+
+        const titleInput = document.getElementById('default-title');
+        
+        titleInput.addEventListener('blur', function() {
+            validateField(this);
+        });
+
+        titleInput.addEventListener('input', function() {
+            if(this.value.trim() !== '') {
+                clearError(this);
+            }
+        });
+
+        function validateField(field) {
+            const existingError = field.parentNode.querySelector('.error-message');
+            
+            if (field.value.trim() === '') {
+                if (!existingError) {
+                    const error = document.createElement('div');
+                    error.className = 'error-message';
+                    error.style.color = '#ef4444'; // Red
+                    error.style.fontSize = '0.85rem';
+                    error.style.marginTop = '5px';
+                    error.innerText = 'This field is compulsory';
+                    field.parentNode.appendChild(error);
+                    field.style.borderColor = '#ef4444';
+                }
+            } else {
+                clearError(field);
+            }
+        }
+
+        function clearError(field) {
+            const existingError = field.parentNode.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+                field.style.borderColor = ''; // Reset
+            }
         }
     </script>
 </body>

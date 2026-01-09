@@ -32,13 +32,27 @@ if (isset($_POST['toggle_status_id'])) {
 
 // Search Logic
 $search = $_GET['search'] ?? '';
-$query = "SELECT id, username, role, created_at FROM users";
 $params = [];
+
+$query = "
+    SELECT 
+        u.id, 
+        u.username, 
+        u.role, 
+        u.created_at,
+        COUNT(t.id) as total_tasks,
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
+    FROM users u
+    LEFT JOIN tasks t ON u.id = t.user_id
+";
+
 if ($search) {
-    $query .= " WHERE username LIKE ?";
+    $query .= " WHERE u.username LIKE ?";
     $params[] = "%$search%";
 }
-$query .= " ORDER BY created_at DESC";
+
+$query .= " GROUP BY u.id, u.username, u.role, u.created_at";
+$query .= " ORDER BY u.created_at DESC";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -91,13 +105,19 @@ $page = 'users';
                                 <th>ID</th>
                                 <th>Username</th>
                                 <th>Role</th>
+                                <th>Tasks</th>
+                                <th>Progress</th>
                                 <th>Joined</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($users as $user): ?>
+                            <?php foreach ($users as $user): 
+                                $total = $user['total_tasks'] ?: 0;
+                                $completed = $user['completed_tasks'] ?: 0;
+                                $percent = $total > 0 ? round(($completed / $total) * 100) : 0;
+                            ?>
                             <tr>
                                 <td>#<?php echo $user['id']; ?></td>
                                 <td style="font-weight: 500;"><?php echo htmlspecialchars($user['username']); ?></td>
@@ -106,12 +126,27 @@ $page = 'users';
                                         <?php echo ucfirst($user['role'] ?? 'user'); ?>
                                     </span>
                                 </td>
+                                <td>
+                                    <span style="font-size: 0.9rem; font-weight: 600;">
+                                        <?php echo $completed; ?> / <?php echo $total; ?>
+                                    </span>
+                                </td>
+                                <td style="width: 150px;">
+                                    <div style="background: rgba(0,0,0,0.1); border-radius: 10px; height: 8px; width: 100%; overflow: hidden;">
+                                        <div style="background: #4facfe; height: 100%; width: <?php echo $percent; ?>%;"></div>
+                                    </div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+                                        <?php echo $percent; ?>%
+                                    </div>
+                                </td>
                                 <td><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
                                 <td>
                                     <span style="color: #10B981; font-weight: 600;">● Active</span>
                                 </td>
                                 <td>
-                                    <div style="display: flex; gap: 15px;">
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <a href="user_details.php?id=<?php echo $user['id']; ?>" class="btn btn-primary" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem; border-radius: 8px;">View Details</a>
+                                        
                                         <form method="POST" style="display:inline;">
                                             <input type="hidden" name="toggle_status_id" value="<?php echo $user['id']; ?>">
                                             <button type="submit" class="btn-action" title="Deactivate">🚫</button>

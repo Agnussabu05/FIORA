@@ -32,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     foreach ($names as $index => $name) {
         if (empty(trim($name))) continue;
         
-        $frequency = $frequencies[$index] ?? 'daily';
-        $emoji = $emojis[$index] ?: '🔥';
+        $frequency = 'daily'; // Default
+        $emoji = ''; // Default
         
         if ($is_global) {
             $users = $pdo->query("SELECT id FROM users")->fetchAll(PDO::FETCH_COLUMN);
@@ -171,17 +171,16 @@ foreach ($allLogs as $l) {
                             <?php foreach($habits as $habit): ?>
                                 <tr>
                                     <td class="habit-info-col">
-                                        <div style="display: flex; align-items: center; gap: 10px;">
-                                            <span style="font-size: 1.2rem;"><?php echo $habit['emoji'] ?: '🔥'; ?></span>
-                                            <div>
-                                                <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">
-                                                    <?php echo htmlspecialchars($habit['name']); ?>
-                                                </div>
-                                                <div style="font-size: 0.75rem; color: var(--text-muted);">
-                                                    <?php echo ucfirst($habit['frequency']); ?> • 
-                                                    <a href="?delete=<?php echo $habit['id']; ?>" style="color: var(--danger); text-decoration: none;" onclick="return confirm('Remove habit?')">Delete</a>
-                                                </div>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; padding-right: 15px;">
+                                            <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">
+                                                <?php echo htmlspecialchars($habit['name']); ?>
                                             </div>
+                                            <a href="?delete=<?php echo $habit['id']; ?>" style="color: var(--danger); text-decoration: none; font-size: 0.9rem;" onclick="return confirm('Remove habit?')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                                                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                                                </svg>
+                                            </a>
                                         </div>
                                     </td>
                                     <?php for ($d = 1; $d <= $daysInMonth; $d++): 
@@ -227,19 +226,7 @@ foreach ($allLogs as $l) {
                             <label>Habit Name</label>
                             <input type="text" name="name[]" class="form-input" required placeholder="Daily Exercise, Meditation, etc.">
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div class="form-group">
-                                <label>Emoji</label>
-                                <input type="text" name="emoji[]" class="form-input" placeholder="🔥, 🧘, 💧...">
-                            </div>
-                            <div class="form-group">
-                                <label>Frequency</label>
-                                <select name="frequency[]" class="form-input">
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                </select>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
 
@@ -273,19 +260,7 @@ foreach ($allLogs as $l) {
                     <label>Habit Name</label>
                     <input type="text" name="name[]" class="form-input" required placeholder="Next habit...">
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div class="form-group">
-                        <label>Emoji</label>
-                        <input type="text" name="emoji[]" class="form-input" placeholder="🔥, 🧘, 💧...">
-                    </div>
-                    <div class="form-group">
-                        <label>Frequency</label>
-                        <select name="frequency[]" class="form-input">
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                        </select>
-                    </div>
-                </div>
+
             `;
             container.appendChild(row);
         }
