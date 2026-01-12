@@ -189,17 +189,24 @@ try {
     $users_report = $stmt->fetchAll();
 
     // --- Study Group Verification Logic ---
-    if (isset($_POST['verify_group'])) {
+    if (isset($_POST['verify_group']) || isset($_POST['reject_group'])) {
         $group_id = $_POST['group_id'];
+        $action = isset($_POST['verify_group']) ? 'approve' : 'reject';
         
-        // Fetch name for message before update
+        // Fetch name for message
         $name_stmt = $pdo->prepare("SELECT name FROM study_groups WHERE id = ?");
         $name_stmt->execute([$group_id]);
         $gn = $name_stmt->fetch();
         
-        $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?")->execute([$group_id]);
-        
-        $_SESSION['admin_msg'] = "Success! Study collective '{$gn['name']}' has been verified and granted access. 🎓✅";
+        if ($action === 'approve') {
+            $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?")->execute([$group_id]);
+            $_SESSION['admin_msg'] = "Success! Study collective '{$gn['name']}' has been verified and granted access. 🎓✅";
+        } else {
+            // Reject: set back to 'forming' so they can try again, or 'rejected' if we want to block.
+            // Let's use 'forming' so they can fix issues.
+            $pdo->prepare("UPDATE study_groups SET status = 'forming' WHERE id = ?")->execute([$group_id]);
+            $_SESSION['admin_msg'] = "Group '{$gn['name']}' returned to forming stage. ↩️";
+        }
         
         header("Location: index.php?tab=study");
         exit;
@@ -612,9 +619,10 @@ $tab = $_GET['tab'] ?? 'dashboard';
                                         </div>
                                     </div>
 
-                                    <form method="POST">
+                                    <form method="POST" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                         <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
-                                        <button type="submit" name="verify_group" class="btn btn-primary" style="width: 100%; padding: 10px;">Approve Group</button>
+                                        <button type="submit" name="reject_group" class="btn" style="background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 10px; font-weight: 700; border-radius: 10px; cursor: pointer;">✕ Reject</button>
+                                        <button type="submit" name="verify_group" class="btn btn-primary" style="padding: 10px;">✓ Approve</button>
                                     </form>
                                 </div>
                             <?php endforeach; ?>
