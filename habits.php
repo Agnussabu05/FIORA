@@ -197,8 +197,10 @@ foreach ($allLogs as $l) {
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="<?php echo $daysInMonth + 1; ?>" style="padding: 60px; color: var(--text-muted);">
-                                    No habits added yet. Click "+ Add Multiple Habits" to get started!
+                                <td colspan="<?php echo $daysInMonth + 1; ?>" style="padding: 60px; text-align: center; color: var(--text-muted);">
+                                    <div style="font-size: 3rem; margin-bottom: 15px;">🌱</div>
+                                    <div style="font-size: 1.1rem; font-weight: 500;">Your habit garden is empty!</div>
+                                    <div style="font-size: 0.95rem; margin-top: 10px;">Start building consistency by adding your first habit. Small steps lead to big changes.</div>
                                 </td>
                             </tr>
                         <?php endif; ?>

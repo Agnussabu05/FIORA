@@ -360,7 +360,7 @@ $user_habits = $stmt->fetchAll();
                         <p style="margin-top: 15px; font-size: 0.9rem; color: var(--text-muted);"><?php echo $remaining_tasks; ?> tasks remaining</p>
                         <div style="margin-top: 15px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 10px;">
                             <?php if (empty($upcoming_tasks)): ?>
-                                <p style="font-size: 0.85rem; color: var(--text-muted); font-style: italic;">No pending tasks</p>
+                                <p style="font-size: 0.85rem; color: var(--text-muted); font-style: italic;">✅ All clear! No pending tasks. You're on top of things!</p>
                             <?php else: ?>
                                 <?php foreach ($upcoming_tasks as $ut): ?>
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -384,7 +384,7 @@ $user_habits = $stmt->fetchAll();
                     <div style="margin-top: 20px;">
                         <?php if (empty($user_habits)): ?>
                             <div style="text-align: center; color: var(--text-muted); font-style: italic; padding: 10px;">
-                                No habits tracked yet.
+                                🔥 Start building better habits today. Track your daily routines and watch your consistency grow!
                             </div>
                         <?php else: ?>
                             <?php foreach($user_habits as $h): ?>

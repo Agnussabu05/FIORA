@@ -166,9 +166,9 @@ foreach ($goals as $g) {
                     <?php endforeach; ?>
                 <?php else: ?>
                     <div style="grid-column: 1/-1; text-align: center; padding: 60px;">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">🛣️</div>
-                        <h3 style="color: #666;">Your map is currently blank.</h3>
-                        <p style="color: #888;">Set your first major ambition today.</p>
+                        <div style="font-size: 4rem; margin-bottom: 20px;">🎯</div>
+                        <h3 style="color: #666;">Your journey begins with a single goal</h3>
+                        <p style="color: #888;">What do you want to achieve? Set your first ambition and watch your dreams take shape.</p>
                     </div>
                 <?php endif; ?>
             </div>

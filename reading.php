@@ -243,9 +243,29 @@ $stats = $statsStmt->fetch();
                     <?php endforeach; ?>
                 <?php else: ?>
                     <div style="grid-column: 1/-1; text-align: center; padding: 60px;">
-                        <div style="font-size: 4rem; margin-bottom: 20px;">📚</div>
-                        <h3 style="color: #666;">No books in this section.</h3>
-                        <p style="color: #888;">Ready to start your next adventure?</p>
+                        <?php
+                        // Contextual empty state messages based on tab
+                        $emoji = '📚';
+                        $title = 'No books in this section.';
+                        $subtitle = 'Ready to start your next adventure?';
+                        
+                        if ($filter_status === 'reading') {
+                            $emoji = '📖';
+                            $title = 'No books in progress';
+                            $subtitle = 'Pick up a book and start your reading journey!';
+                        } elseif ($filter_status === 'completed') {
+                            $emoji = '🏆';
+                            $title = 'No books finished yet';
+                            $subtitle = 'Complete your first book and celebrate your achievement!';
+                        } elseif ($filter_status === 'wishlist') {
+                            $emoji = '⭐';
+                            $title = 'Your reading wishlist is empty';
+                            $subtitle = 'Add books you\'d love to read someday!';
+                        }
+                        ?>
+                        <div style="font-size: 4rem; margin-bottom: 20px;"><?php echo $emoji; ?></div>
+                        <h3 style="color: #666;"><?php echo $title; ?></h3>
+                        <p style="color: #888;"><?php echo $subtitle; ?></p>
                     </div>
                 <?php endif; ?>
             </div>

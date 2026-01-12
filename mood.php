@@ -150,20 +150,28 @@ $recentLogs = $stmt->fetchAll();
                     <!-- History -->
                     <div style="margin-top: 30px;">
                         <h3 style="margin-bottom: 20px; color: #000 !important;">Recent Check-ins</h3>
-                        <?php foreach ($recentLogs as $log): 
-                            $emoji = ['😫','😔','😐','😊','🚀'][$log['mood_score']-1];
-                        ?>
-                            <div class="log-item">
-                                <div class="mood-emoji-small"><?php echo $emoji; ?></div>
-                                <div>
-                                    <div style="font-weight: 800; color: #000;"><?php echo $log['mood_label']; ?></div>
-                                    <div style="font-size: 0.85rem; color: #222; font-weight: 600;"><?php echo date('M d, Y', strtotime($log['log_date'])); ?></div>
-                                    <?php if ($log['note']): ?>
-                                        <div style="font-size: 0.9rem; color: #111; font-style: italic; margin-top: 5px; font-weight: 500;">"<?php echo htmlspecialchars($log['note']); ?>"</div>
-                                    <?php endif; ?>
-                                </div>
+                        <?php if (empty($recentLogs)): ?>
+                            <div style="text-align: center; padding: 40px; background: rgba(255,255,255,0.4); border-radius: 15px; border: 1px solid var(--glass-border);">
+                                <div style="font-size: 2.5rem; margin-bottom: 15px;">🌈</div>
+                                <div style="font-size: 1rem; font-weight: 500; color: #000; margin-bottom: 8px;">No mood entries yet</div>
+                                <div style="font-size: 0.9rem; color: #222; font-weight: 500;">Start tracking your emotional journey today and discover patterns in your well-being.</div>
                             </div>
-                        <?php endforeach; ?>
+                        <?php else: ?>
+                            <?php foreach ($recentLogs as $log): 
+                                $emoji = ['😫','😔','😐','😊','🚀'][$log['mood_score']-1];
+                            ?>
+                                <div class="log-item">
+                                    <div class="mood-emoji-small"><?php echo $emoji; ?></div>
+                                    <div>
+                                        <div style="font-weight: 800; color: #000;"><?php echo $log['mood_label']; ?></div>
+                                        <div style="font-size: 0.85rem; color: #222; font-weight: 600;"><?php echo date('M d, Y', strtotime($log['log_date'])); ?></div>
+                                        <?php if ($log['note']): ?>
+                                            <div style="font-size: 0.9rem; color: #111; font-style: italic; margin-top: 5px; font-weight: 500;">"<?php echo htmlspecialchars($log['note']); ?>"</div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </div>
                 </div>
 

@@ -17,7 +17,10 @@ $stats = [
     'study_hours' => 0,
     'ai_usage' => 142, // Mock for now
     'active_today' => 0,
-    'active_week' => 0
+    'active_week' => 0,
+    'study_groups_total' => 0,
+    'study_groups_active' => 0,
+    'study_groups_pending' => 0
 ];
 
 $charts = [
@@ -47,6 +50,11 @@ try {
     // Study Hours
     $stmt = $pdo->query("SELECT SUM(duration_minutes) FROM study_sessions");
     $stats['study_hours'] = round(($stmt->fetchColumn() ?: 0) / 60, 1);
+
+    // Study Group Stats
+    $stats['study_groups_total'] = $pdo->query("SELECT COUNT(*) FROM study_groups")->fetchColumn();
+    $stats['study_groups_active'] = $pdo->query("SELECT COUNT(*) FROM study_groups WHERE status = 'active'")->fetchColumn();
+    $stats['study_groups_pending'] = $pdo->query("SELECT COUNT(*) FROM study_groups WHERE status = 'pending_verification'")->fetchColumn();
 
     // Active Users (Today) - Distinct users who did something today
     $today = date('Y-m-d');
@@ -180,6 +188,41 @@ try {
     $stmt->execute($params);
     $users_report = $stmt->fetchAll();
 
+    // --- Study Group Verification Logic ---
+    if (isset($_POST['verify_group'])) {
+        $group_id = $_POST['group_id'];
+        
+        // Fetch name for message before update
+        $name_stmt = $pdo->prepare("SELECT name FROM study_groups WHERE id = ?");
+        $name_stmt->execute([$group_id]);
+        $gn = $name_stmt->fetch();
+        
+        $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?")->execute([$group_id]);
+        
+        $_SESSION['admin_msg'] = "Success! Study collective '{$gn['name']}' has been verified and granted access. 🎓✅";
+        
+        header("Location: index.php?tab=study");
+        exit;
+    }
+
+    // Groups for verification list
+    $pending_groups = $pdo->query("SELECT * FROM study_groups WHERE status = 'pending_verification' ORDER BY created_at DESC")->fetchAll();
+    $pending_group_members = [];
+    foreach ($pending_groups as $pg) {
+        $stmt = $pdo->prepare("SELECT u.username, sgm.role FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ?");
+        $stmt->execute([$pg['id']]);
+        $pending_group_members[$pg['id']] = $stmt->fetchAll();
+    }
+
+    // Active Groups (The "Tribes")
+    $active_groups_list = $pdo->query("SELECT * FROM study_groups WHERE status = 'active' ORDER BY created_at DESC")->fetchAll();
+    $active_group_members = [];
+    foreach ($active_groups_list as $ag) {
+        $stmt = $pdo->prepare("SELECT u.username, sgm.role FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ?");
+        $stmt->execute([$ag['id']]);
+        $active_group_members[$ag['id']] = $stmt->fetchAll();
+    }
+
 } catch (PDOException $e) {
     // Handle error gracefully
     error_log("Dashboard Error: " . $e->getMessage());
@@ -187,6 +230,7 @@ try {
 }
 
 $page = 'dashboard';
+$tab = $_GET['tab'] ?? 'dashboard';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -303,6 +347,17 @@ $page = 'dashboard';
         .icon-gold { background: linear-gradient(135deg, #fccb90 0%, #d57eeb 100%); color: #fff; }
         .icon-cyan { background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); color: #fff; }
 
+        .personnel-list {
+            display: none;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+        }
+        .personnel-list.visible {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -312,12 +367,51 @@ $page = 'dashboard';
         <main class="main-content">
             <header class="top-bar">
                 <div class="welcome-section">
-                    <h1 style="background: linear-gradient(to right, #222, #555); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Admin Dashboard</h1>
-                    <p>System health overview & user statistics.</p>
+                    <h1 style="background: linear-gradient(to right, #222, #555); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        <?php echo $tab == 'study' ? 'Group Study Management' : 'Admin Dashboard'; ?>
+                    </h1>
+                    <p><?php echo $tab == 'study' ? 'Review and verify pending group study requests.' : 'System health overview & user statistics.'; ?></p>
                 </div>
             </header>
 
             <div class="content-wrapper">
+                
+                <?php if (isset($_SESSION['admin_msg'])): ?>
+                    <div style="background: rgba(16, 185, 129, 0.1); color: #065f46; padding: 15px 20px; border-radius: 15px; border: 1px solid rgba(16, 185, 129, 0.2); margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; animation: fadeInUp 0.5s ease-out;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span style="font-size: 1.2rem;">✨</span>
+                            <span style="font-weight: 600;"><?php echo $_SESSION['admin_msg']; unset($_SESSION['admin_msg']); ?></span>
+                        </div>
+                        <button onclick="this.parentElement.remove()" style="background: none; border: none; color: inherit; cursor: pointer; font-size: 1.1rem; opacity: 0.6;">✕</button>
+                    </div>
+                <?php endif; ?>
+                
+                <!-- Group Study Statistics (Always Visible) -->
+                <div class="stats-grid" style="margin-bottom: 25px;">
+                    <div class="stat-card">
+                        <div class="stat-icon icon-blue" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);">🌐</div>
+                        <div class="stat-info">
+                            <h3><?php echo number_format($stats['study_groups_total']); ?></h3>
+                            <p>Total Study Groups</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon icon-green" style="background: linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%);">✅</div>
+                        <div class="stat-info">
+                            <h3><?php echo number_format($stats['study_groups_active']); ?></h3>
+                            <p>Approved Groups</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon icon-orange" style="background: linear-gradient(135deg, #ffedd5 0%, #fdba74 100%);">⏳</div>
+                        <div class="stat-info">
+                            <h3><?php echo number_format($stats['study_groups_pending']); ?></h3>
+                            <p>Pending Requests</p>
+                        </div>
+                    </div>
+                </div>
+
+                <?php if ($tab !== 'study'): ?>
                 
                 <!-- User Metrics Row -->
                 <div class="stats-grid">
@@ -379,6 +473,7 @@ $page = 'dashboard';
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Charts Grid -->
                 <div class="charts-grid">
@@ -476,6 +571,100 @@ $page = 'dashboard';
                         </tbody>
                     </table>
                 </div>
+                <?php endif; ?>
+
+                <!-- Study Group Verification Section (Show always if tab is study, or at bottom otherwise) -->
+                <?php if ($tab == 'study' || count($pending_groups) > 0): ?>
+                <div class="glass-card" style="margin-bottom: 40px; <?php echo $tab == 'study' ? 'min-height: 60vh;' : ''; ?>">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>Group Study Verification 🎓</h3>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="background: rgba(217, 119, 6, 0.1); color: #d97706; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                                <?php echo count($pending_groups); ?> Pending
+                            </span>
+                            <?php if ($tab == 'study'): ?>
+                                <button onclick="toggleRequests()" id="toggleBtn" class="btn" style="background: rgba(0,0,0,0.05); font-size: 0.8rem; padding: 6px 15px; border-radius: 10px; font-weight: 700;">VIEW REQUESTS ↓</button>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <?php if (count($pending_groups) > 0): ?>
+                        <div id="requestsList" style="<?php echo $tab == 'study' ? 'display: none;' : ''; ?>">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                            <?php foreach ($pending_groups as $group): ?>
+                                <div style="background: rgba(255,255,255,0.4); padding: 20px; border-radius: 15px; border: 1px solid var(--glass-border);">
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 2px;">📜 <?php echo htmlspecialchars($group['name']); ?></div>
+                                    <div style="font-weight: 600; color: var(--primary); font-size: 0.9rem; margin-bottom: 8px;">📖 <?php echo htmlspecialchars($group['subject'] ?: 'General'); ?></div>
+                                    <div style="font-size: 0.75rem; color: #666; margin-bottom: 12px; font-weight: 600; text-transform: uppercase;">Requested: <?php echo date('M j, Y', strtotime($group['created_at'])); ?></div>
+                                    
+                                    <div style="margin-bottom: 15px;">
+                                        <button type="button" onclick="this.nextElementSibling.classList.toggle('visible'); this.innerText = this.innerText.includes('View') ? 'Hide Personnel ↑' : 'View Personnel ↓';" 
+                                                style="background: none; border: none; color: var(--secondary); font-size: 0.75rem; font-weight: 800; cursor: pointer; padding: 0; margin-bottom: 5px; text-transform: uppercase;">
+                                            View Personnel ↓
+                                        </button>
+                                        <div class="personnel-list" style="margin-top: 10px;">
+                                            <?php foreach ($pending_group_members[$group['id']] as $member): ?>
+                                                <div style="font-size: 0.85rem; display: flex; justify-content: space-between; margin-bottom: 5px; background: rgba(0,0,0,0.03); padding: 5px 10px; border-radius: 8px;">
+                                                    <span style="font-weight: 700;">👤 <?php echo htmlspecialchars($member['username']); ?></span>
+                                                    <span style="font-size: 0.65rem; opacity: 0.6; font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 5px;"><?php echo strtoupper($member['role']); ?></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+
+                                    <form method="POST">
+                                        <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
+                                        <button type="submit" name="verify_group" class="btn btn-primary" style="width: 100%; padding: 10px;">Approve Group</button>
+                                    </form>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php else: ?>
+                        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                            <div style="font-size: 2.5rem; margin-bottom: 15px;">✅</div>
+                            <p>No study groups pending verification. All clear!</p>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Active Tribes Directory (Visible to Admin) -->
+                    <?php if ($tab == 'study' && count($active_groups_list) > 0): ?>
+                    <div style="margin-top: 40px; border-top: 2px solid rgba(0,0,0,0.05); padding-top: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="color: var(--secondary); font-weight: 800;">🌐 Active Tribes (All Groups)</h3>
+                            <span style="background: rgba(16, 185, 129, 0.1); color: #10B981; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                                <?php echo count($active_groups_list); ?> Live
+                            </span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                            <?php foreach ($active_groups_list as $group): ?>
+                                <div style="background: rgba(0,0,0,0.02); padding: 20px; border-radius: 15px; border: 1px dashed rgba(0,0,0,0.1);">
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 2px;">🛡️ <?php echo htmlspecialchars($group['name']); ?></div>
+                                    <div style="font-weight: 600; color: var(--primary); font-size: 0.9rem; margin-bottom: 8px;">📖 <?php echo htmlspecialchars($group['subject'] ?: 'General'); ?></div>
+                                    
+                                    <div style="margin-bottom: 10px;">
+                                        <button type="button" onclick="this.nextElementSibling.classList.toggle('visible'); this.innerText = this.innerText.includes('View') ? 'Hide Personnel ↑' : 'View Personnel ↓';" 
+                                                style="background: none; border: none; color: var(--secondary); font-size: 0.75rem; font-weight: 800; cursor: pointer; padding: 0; margin-bottom: 5px; text-transform: uppercase;">
+                                            View Personnel ↓
+                                        </button>
+                                        <div class="personnel-list" style="margin-top: 10px;">
+                                            <?php foreach ($active_group_members[$group['id']] as $member): ?>
+                                                <div style="font-size: 0.85rem; display: flex; justify-content: space-between; margin-bottom: 5px; background: rgba(255,255,255,0.4); padding: 5px 10px; border-radius: 8px;">
+                                                    <span style="font-weight: 700;">👤 <?php echo htmlspecialchars($member['username']); ?></span>
+                                                    <span style="font-size: 0.65rem; opacity: 0.6; font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 5px;"><?php echo strtoupper($member['role']); ?></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #999; font-weight: 600; text-transform: uppercase;">Active since: <?php echo date('M j, Y', strtotime($group['created_at'])); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
 
             </div>
         </main>
@@ -579,6 +768,18 @@ $page = 'dashboard';
                 }
             }
         });
+
+        function toggleRequests() {
+            const list = document.getElementById('requestsList');
+            const btn = document.getElementById('toggleBtn');
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                btn.innerText = 'HIDE REQUESTS ↑';
+            } else {
+                list.style.display = 'none';
+                btn.innerText = 'VIEW REQUESTS ↓';
+            }
+        }
     </script>
 </body>
 </html>

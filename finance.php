@@ -288,8 +288,9 @@ foreach ($trendRows as $row) {
                             <?php endforeach; ?>
                         <?php else: ?>
                             <div style="text-align: center; padding: 50px; color: var(--text-muted);">
-                                <div style="font-size: 3rem; margin-bottom: 15px;">🍃</div>
-                                <p>No transactions found for this period.</p>
+                                <div style="font-size: 3rem; margin-bottom: 15px;">💰</div>
+                                <p style="font-size: 1.1rem; font-weight: 500; margin-bottom: 8px;">No financial records for this month yet</p>
+                                <p style="font-size: 0.95rem;">Start tracking your income and expenses to gain insights into your spending habits.</p>
                             </div>
                         <?php endif; ?>
                     </div>
