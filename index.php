@@ -2,6 +2,14 @@
 require_once 'includes/db.php';
 require_once 'includes/auth.php'; // Enforce login
 
+if (!$pdo) {
+    die('<div style="font-family: sans-serif; text-align: center; padding: 50px;">
+            <h1>System Unavailable</h1>
+            <p>The database connection failed. Please ensure MySQL is running.</p>
+            <p style="color: #666; font-size: 0.9em;">' . ($db_connection_error ?? 'Unknown error') . '</p>
+         </div>');
+}
+
 $username = $_SESSION['username'] ?? 'User';
 $user_id = $_SESSION['user_id'];
 

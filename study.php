@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/db.php';
 require_once 'includes/auth.php';
+require_once 'includes/functions.php'; // Logging helper
 $page = 'study';
 
 // Handle Add Session
@@ -12,6 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     $stmt = $pdo->prepare("INSERT INTO study_sessions (user_id, subject, duration_minutes, session_date, notes) VALUES (?, ?, ?, ?, ?)");
     $stmt->execute([$user_id, $subject, $duration, $date, $notes]);
+    
+    log_activity($pdo, $user_id, 'create_session', "Planned session: $subject");
+    
     header("Location: study.php");
     exit;
 }
@@ -41,6 +45,8 @@ if (isset($_POST['toggle_interest'])) {
     $new_status = $interested_study ? 0 : 1;
     $pdo->prepare("UPDATE users SET interested_study = ? WHERE id = ?")->execute([$new_status, $user_id]);
     
+    log_activity($pdo, $user_id, 'study_visibility_toggle', "Toggled visibility to " . ($new_status ? 'Visible' : 'Hidden'));
+    
     $_SESSION['study_msg'] = $new_status 
         ? "Welcome to Group Study! 🌍 You're now visible to other students." 
         : "Visibility turned off. 🛡️ Focusing solo.";
@@ -58,9 +64,19 @@ if (isset($_POST['send_request'])) {
     if (empty($receiver_ids)) {
         $_SESSION['study_msg'] = "Please select at least one student to invite! ⚠️";
     } else {
+        // Check for duplicate name
+        $stmt_check = $pdo->prepare("SELECT 1 FROM study_groups WHERE name = ?");
+        $stmt_check->execute([$group_name]);
+        if ($stmt_check->fetch()) {
+             $_SESSION['study_msg'] = "The name '$group_name' is already taken! 🛑 Try a unique one.";
+             header("Location: study.php");
+             exit;
+        }
+
         // 1. Create the Group
-        $stmt = $pdo->prepare("INSERT INTO study_groups (name, subject, status) VALUES (?, ?, 'forming')");
-        $stmt->execute([$group_name, $subject_name]);
+        $description = $_POST['group_desc'] ?? '';
+        $stmt = $pdo->prepare("INSERT INTO study_groups (name, subject, description, status) VALUES (?, ?, ?, 'forming')");
+        $stmt->execute([$group_name, $subject_name, $description]);
         $group_id = $pdo->lastInsertId();
         
         // 2. Add leader
@@ -71,6 +87,9 @@ if (isset($_POST['send_request'])) {
         foreach ($receiver_ids as $receiver_id) {
             $stmt->execute([$user_id, $receiver_id, $group_name, $subject_name, $group_id]);
         }
+        
+        log_activity($pdo, $user_id, 'create_group', "Created group '$group_name' and invited " . count($receiver_ids) . " members", $group_id);
+        
         $_SESSION['study_msg'] = "Invites sent! 🚀 Your squad is forming.";
     }
     header("Location: study.php");
@@ -85,13 +104,28 @@ if (isset($_POST['update_request'])) {
     $pdo->prepare("UPDATE study_requests SET status = ? WHERE id = ?")->execute([$new_status, $request_id]);
     
     if ($new_status === 'accepted') {
-        $req_stmt = $pdo->prepare("SELECT group_id, receiver_id FROM study_requests WHERE id = ?");
+        $req_stmt = $pdo->prepare("SELECT group_id, sender_id, receiver_id FROM study_requests WHERE id = ?");
         $req_stmt->execute([$request_id]);
         $req = $req_stmt->fetch();
         
         if ($req['group_id']) {
-            $pdo->prepare("INSERT INTO study_group_members (group_id, user_id, role) VALUES (?, ?, 'member')")->execute([$req['group_id'], $req['receiver_id']]);
-            $_SESSION['study_msg'] = "You've joined the group! 🤝";
+            // Determine who is joining: 
+            // If the person accepting (current user) is the receiver, then the sender is joining.
+            // If the person accepting (current user) is the sender, then the receiver is joining (less common but possible).
+            // Usually, receiver accepts an invite (sender invites) OR receiver (leader) accepts a join request (sender requests).
+            // In both cases, we need to add the person who is NOT already in the group members.
+            
+            $person_joining = ($user_id == $req['receiver_id']) ? $req['sender_id'] : $req['receiver_id'];
+            
+            // Avoid duplicate members
+            $check = $pdo->prepare("SELECT 1 FROM study_group_members WHERE group_id = ? AND user_id = ?");
+            $check->execute([$req['group_id'], $person_joining]);
+            if (!$check->fetch()) {
+                $pdo->prepare("INSERT INTO study_group_members (group_id, user_id, role) VALUES (?, ?, 'member')")->execute([$req['group_id'], $person_joining]);
+                
+                log_activity($pdo, $user_id, 'join_group_accepted', "Accepted join request/invite for user ID $person_joining", $req['group_id']);
+            }
+            $_SESSION['study_msg'] = "Member added to the tribe! 🤝";
         }
     }
     header("Location: study.php");
@@ -113,17 +147,92 @@ if (isset($_POST['submit_for_verification'])) {
     if ($stmt->fetch() && $member_count > 1) {
         $pdo->prepare("UPDATE study_groups SET status = 'pending_verification' WHERE id = ?")->execute([$group_id]);
         $pdo->prepare("DELETE FROM study_requests WHERE group_id = ? AND status = 'pending'")->execute([$group_id]);
+        
+        log_activity($pdo, $user_id, 'submit_group_verification', "Submitted group ID $group_id for admin verification", $group_id);
+        
         $_SESSION['study_msg'] = "Submitted for Admin Approval! ⏳";
     }
     header("Location: study.php");
     exit;
 }
 
+
+// Handle LEAVE Group (Members)
+if (isset($_POST['leave_group'])) {
+    $group_id = $_POST['group_id'];
+    
+    // Check if user is leader (Leader cannot leave, must disband)
+    $stmt = $pdo->prepare("SELECT role FROM study_group_members WHERE group_id = ? AND user_id = ?");
+    $stmt->execute([$group_id, $user_id]);
+    $role = $stmt->fetchColumn();
+    
+    if ($role === 'member') {
+        $pdo->prepare("DELETE FROM study_group_members WHERE group_id = ? AND user_id = ?")->execute([$group_id, $user_id]);
+        $_SESSION['study_msg'] = "You have left the tribe. 👋";
+        log_activity($pdo, $user_id, 'leave_group', "Left group ID $group_id", $group_id);
+    } else {
+        $_SESSION['study_msg'] = "Leaders cannot leave! You must disband the tribe or Transfer Leadership (Coming Soon).";
+    }
+    
+    header("Location: study.php");
+    exit;
+}
+
+// Handle DISBAND Group (Leader)
+if (isset($_POST['disband_group'])) {
+    $group_id = $_POST['group_id'];
+    
+    // Security Check: Verify user is LEADER
+    $stmt = $pdo->prepare("SELECT role FROM study_group_members WHERE group_id = ? AND user_id = ?");
+    $stmt->execute([$group_id, $user_id]);
+    $role = $stmt->fetchColumn();
+    
+    if ($role === 'leader') {
+        // Cascade Delete
+        $pdo->prepare("DELETE FROM study_group_members WHERE group_id = ?")->execute([$group_id]);
+        $pdo->prepare("DELETE FROM study_requests WHERE group_id = ?")->execute([$group_id]);
+        $pdo->prepare("DELETE FROM study_groups WHERE id = ?")->execute([$group_id]);
+        
+        $_SESSION['study_msg'] = "Tribe Disbanded. 🌪️";
+        log_activity($pdo, $user_id, 'disband_group', "Disbanded group ID $group_id", $group_id);
+    }
+    
+    header("Location: study.php");
+    exit;
+}
+
+// Handle Cancel Request
 // Handle Cancel Request
 if (isset($_POST['cancel_request'])) {
     $request_id = $_POST['request_id'];
     $pdo->prepare("DELETE FROM study_requests WHERE id = ? AND sender_id = ?")->execute([$request_id, $user_id]);
     $_SESSION['study_msg'] = "Invitation withdrawn.";
+    header("Location: study.php");
+    exit;
+}
+
+// Handle Join Group Request
+if (isset($_POST['join_group'])) {
+    $group_id = $_POST['group_id'];
+    
+    // Find lead of this group (ensure we send request to current leader)
+    $stmt = $pdo->prepare("SELECT user_id FROM study_group_members WHERE group_id = ? AND role = 'leader'");
+    $stmt->execute([$group_id]);
+    $leader = $stmt->fetch();
+    
+    if ($leader) {
+        // Check if a request already exists
+        $stmt = $pdo->prepare("SELECT id FROM study_requests WHERE sender_id = ? AND group_id = ? AND status = 'pending'");
+        $stmt->execute([$user_id, $group_id]);
+        if (!$stmt->fetch()) {
+            $stmt = $pdo->prepare("INSERT INTO study_requests (sender_id, receiver_id, group_id, status) VALUES (?, ?, ?, 'pending')");
+            $stmt->execute([$user_id, $leader['user_id'], $group_id]);
+            $_SESSION['study_msg'] = "Join request sent to tribe leader! 🚀";
+        } else {
+            $_SESSION['study_msg'] = "You already have a pending request for this group. ⏳";
+        }
+    }
+    
     header("Location: study.php");
     exit;
 }
@@ -144,7 +253,13 @@ foreach ($sent_req_stmt->fetchAll() as $req) {
     $sent_requests[$key]['recipients'][] = $req;
 }
 
-$received_req_stmt = $pdo->prepare("SELECT sr.*, u.username as sender_name FROM study_requests sr JOIN users u ON sr.sender_id = u.id WHERE sr.receiver_id = ? AND sr.status = 'pending'");
+$received_req_stmt = $pdo->prepare("
+    SELECT sr.*, u.username as sender_name, sg.name as group_name_actual 
+    FROM study_requests sr 
+    JOIN users u ON sr.sender_id = u.id 
+    LEFT JOIN study_groups sg ON sr.group_id = sg.id
+    WHERE sr.receiver_id = ? AND sr.status = 'pending'
+");
 $received_req_stmt->execute([$user_id]);
 $received_requests = $received_req_stmt->fetchAll();
 
@@ -155,6 +270,20 @@ $my_groups = $groups_stmt->fetchAll();
 $active_groups_stmt = $pdo->prepare("SELECT sg.*, (SELECT GROUP_CONCAT(u.username SEPARATOR ', ') FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = sg.id) as members_list FROM study_groups sg WHERE sg.status = 'active' ORDER BY sg.created_at DESC");
 $active_groups_stmt->execute();
 $all_active_groups = $active_groups_stmt->fetchAll();
+
+// Discoverable Groups (Forming or Active, where user is NOT a member)
+$discover_stmt = $pdo->prepare("
+    SELECT sg.*, 
+    (SELECT u.username FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = sg.id AND sgm.role = 'leader') as leader_name,
+    (SELECT COUNT(*) FROM study_group_members WHERE group_id = sg.id) as member_count,
+    (SELECT 1 FROM study_group_members WHERE group_id = sg.id AND user_id = ? LIMIT 1) as is_member,
+    (SELECT 1 FROM study_requests WHERE group_id = sg.id AND sender_id = ? AND status = 'pending' LIMIT 1) as is_pending
+    FROM study_groups sg 
+    WHERE sg.status IN ('forming', 'active') 
+    ORDER BY sg.created_at DESC
+");
+$discover_stmt->execute([$user_id, $user_id]);
+$discover_groups = $discover_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -200,6 +329,20 @@ $all_active_groups = $active_groups_stmt->fetchAll();
             padding: 24px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.03);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .discover-card {
+            background: white; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 16px; 
+            padding: 20px; 
+            transition: transform 0.2s, box-shadow 0.2s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+        .discover-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.08);
+            border-color: var(--accent-study);
         }
         
         /* Session List */
@@ -280,7 +423,7 @@ $all_active_groups = $active_groups_stmt->fetchAll();
         }
         
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: 0; } }
-
+        
         /* Timer Block */
         .timer-block {
             text-align: center;
@@ -409,12 +552,20 @@ $all_active_groups = $active_groups_stmt->fetchAll();
                                         <!-- Step 2 -->
                                         <div class="step-page" id="step2">
                                             <div class="form-group">
-                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">GROUP NAME</label>
-                                                <input type="text" name="group_name" id="gName" class="form-input" placeholder="e.g. Midnight Coders" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                                                    TRIBE NAME <span id="nameFeedback" style="float: right; font-weight: 600;"></span>
+                                                </label>
+                                                <input type="text" name="group_name" id="gName" class="form-input" placeholder="e.g. The Night Owls" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
                                             </div>
                                             <div class="form-group" style="margin-top: 15px;">
-                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">SUBJECT / TOPIC</label>
+                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                                                    SUBJECT / TOPIC <span id="subjectFeedback" style="float: right; font-weight: 600;"></span>
+                                                </label>
                                                 <input type="text" name="subject_name" id="gSubject" class="form-input" placeholder="e.g. Advanced Calculus" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                                            </div>
+                                            <div class="form-group" style="margin-top: 15px;">
+                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">GOAL / DESCRIPTION</label>
+                                                <textarea name="group_desc" id="gDesc" class="form-input" placeholder="What is this tribe's mission?" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; height: 80px;"></textarea>
                                             </div>
                                             <div style="display: flex; justify-content: space-between; margin-top: 24px;">
                                                 <button type="button" onclick="nextStep(1)" class="btn btn-secondary">Back</button>
@@ -452,16 +603,25 @@ $all_active_groups = $active_groups_stmt->fetchAll();
                                 <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
                                     <div style="display: flex; justify-content: space-between; align-items: start;">
                                         <div>
-                                            <div style="font-weight: 700; color: #1e293b; font-size: 1.1rem;"><?php echo htmlspecialchars($g['name']); ?></div>
-                                            <div style="color: #64748b; font-size: 0.9rem;"><?php echo htmlspecialchars($g['subject']); ?></div>
+                                            <div style="font-weight: 700; color: #1e293b; font-size: 1.1rem;">
+                                                <a href="tribe.php?id=<?php echo $g['id']; ?>" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px;">
+                                                    <?php echo htmlspecialchars($g['name']); ?>
+                                                    <span style="font-size: 0.8rem; background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 12px; font-weight: 600;">Enter 🚪</span>
+                                                </a>
+                                            </div>
+                                            <div style="color: #64748b; font-size: 0.9rem; font-weight: 600;">📖 <?php echo htmlspecialchars($g['subject']); ?></div>
+                                            <?php if(!empty($g['description'])): ?>
+                                                <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 4px; font-style: italic;">"<?php echo htmlspecialchars($g['description']); ?>"</div>
+                                            <?php endif; ?>
                                             <div style="margin-top: 8px;">
                                                 <?php 
                                                 $mems = explode('|', $g['members_list']);
                                                 foreach($mems as $m): $parts = explode(',', $m); 
                                                 ?>
                                                 <span style="display: inline-block; background: #f1f5f9; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px; color: #475569;">
-                                                    <?php echo htmlspecialchars($parts[0]); ?> 
-                                                    <?php if(strpos($parts[1], 'leader')!==false) echo '👑'; ?>
+                                                    <?php echo htmlspecialchars($parts[0]); ?>
+                                                    <?php if($parts[0] === $_SESSION['username']) echo ' <b>(You)</b>'; ?>
+                                                    <?php if(strpos($parts[1], 'leader')!==false) echo ' 👑'; ?>
                                                 </span>
                                                 <?php endforeach; ?>
                                             </div>
@@ -487,12 +647,68 @@ $all_active_groups = $active_groups_stmt->fetchAll();
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             <?php else: ?>
+
                                                 <span class="badge badge-pending">Pending Admin</span>
                                             <?php endif; ?>
+
+                                            <!-- Manage Buttons -->
+                                            <div style="margin-top: 12px; text-align: right;">
+                                                <?php if($g['my_role'] == 'leader'): ?>
+                                                    <form method="POST" onsubmit="return confirm('⚠️ Disband this tribe? This cannot be undone.')">
+                                                        <input type="hidden" name="group_id" value="<?php echo $g['id']; ?>">
+                                                        <button name="disband_group" class="btn" style="background: none; border: 1px solid #ef4444; color: #ef4444; font-size: 0.75rem; padding: 4px 10px; border-radius: 8px;">✕ Disband Tribe</button>
+                                                    </form>
+                                                <?php else: ?>
+                                                    <form method="POST" onsubmit="return confirm('Leave this tribe?')">
+                                                        <input type="hidden" name="group_id" value="<?php echo $g['id']; ?>">
+                                                        <button name="leave_group" class="btn" style="background: none; border: 1px solid #cbd5e1; color: #64748b; font-size: 0.75rem; padding: 4px 10px; border-radius: 8px;">Leave Group</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             <?php endforeach; endif; ?>
+                        </div>
+
+                        <!-- Discover Tribes -->
+                        <div style="margin-top: 40px;">
+                            <div class="section-title">Discover Tribes</div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+                                <?php if ($discover_groups): foreach($discover_groups as $dg): ?>
+                                    <div class="discover-card">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                            <span class="badge <?php echo $dg['status']=='active'?'badge-active':'badge-forming'; ?>">
+                                                <?php echo ucfirst($dg['status']); ?>
+                                            </span>
+                                            <span style="font-size: 0.8rem; color: #64748b;">👥 <?php echo $dg['member_count']; ?></span>
+                                        </div>
+                                        <div style="font-weight: 700; color: #1e293b; font-size: 1.1rem; margin-bottom: 4px;"><?php echo htmlspecialchars($dg['name']); ?></div>
+                                        <div style="color: #64748b; font-size: 0.9rem; margin-bottom: 16px;">📖 <?php echo htmlspecialchars($dg['subject']); ?></div>
+                                        
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div style="font-size: 0.8rem; color: #94a3b8;">
+                                                Lead: <?php echo htmlspecialchars($dg['leader_name'] ?: '?'); ?>
+                                            </div>
+                                            
+                                            <?php if ($dg['is_member']): ?>
+                                                <button disabled class="btn" style="background: #dcfce7; color: #166534; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #bbf7d0;">✅ Member</button>
+                                            <?php elseif ($dg['is_pending']): ?>
+                                                <button disabled class="btn" style="background: #ffedd5; color: #9a3412; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #fed7aa;">⏳ Requested</button>
+                                            <?php else: ?>
+                                                <form method="POST">
+                                                    <input type="hidden" name="group_id" value="<?php echo $dg['id']; ?>">
+                                                    <button name="join_group" class="btn" style="background: #eff6ff; color: #2563eb; font-weight: 600; padding: 8px 16px; font-size: 0.85rem;">Join Request 🚀</button>
+                                                </form>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; else: ?>
+                                    <div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #94a3b8; border: 1px dashed #e2e8f0; border-radius: 12px;">
+                                        No new tribes found. Why not start one?
+                                    </div>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
 
@@ -544,8 +760,26 @@ $all_active_groups = $active_groups_stmt->fetchAll();
                 }
             }
             if (n === 3) {
-                document.getElementById('revName').innerText = document.getElementById('gName').value || 'Untitled Group';
-                document.getElementById('revSub').innerText = document.getElementById('gSubject').value || 'General Study';
+                // Validate Name & Subject
+                const nameIn = document.getElementById('gName');
+                const subIn = document.getElementById('gSubject');
+                let valid = true;
+
+                if (!nameIn.value.trim()) {
+                    document.getElementById('nameFeedback').innerHTML = '❌ Field is compulsory!';
+                    document.getElementById('nameFeedback').style.color = '#ef4444';
+                    valid = false;
+                }
+                if (!subIn.value.trim()) {
+                    document.getElementById('subjectFeedback').innerHTML = '❌ Field is compulsory!';
+                    document.getElementById('subjectFeedback').style.color = '#ef4444';
+                    valid = false;
+                }
+                
+                if (!valid) return;
+
+                document.getElementById('revName').innerText = nameIn.value || 'Untitled Group';
+                document.getElementById('revSub').innerText = subIn.value || 'General Study';
                 let count = document.querySelectorAll('input[name="receiver_ids[]"]:checked').length;
                 document.getElementById('revCount').innerText = `${count} Invites Ready`;
             }
@@ -616,5 +850,55 @@ $all_active_groups = $active_groups_stmt->fetchAll();
             </form>
         </div>
     </div>
+
+<script>
+    // Live Group Name Validation
+    const gNameInput = document.getElementById('gName');
+    const feedbackSpan = document.getElementById('nameFeedback');
+
+    if (gNameInput) {
+        gNameInput.addEventListener('keyup', function() {
+            const name = this.value.trim();
+            if (name.length < 2) {
+                feedbackSpan.innerHTML = '';
+                return;
+            }
+
+            fetch('check_group_availability.php?name=' + encodeURIComponent(name))
+                .then(response => response.json())
+                .then(data => {
+                    if (data.taken) {
+                        feedbackSpan.innerHTML = '❌ That name is already taken!';
+                        feedbackSpan.style.color = '#ef4444';
+                    } else {
+                        feedbackSpan.innerHTML = '✅ Name is available!';
+                        feedbackSpan.style.color = '#10b981';
+                    }
+                })
+                .catch(err => console.error(err));
+        });
+
+        gNameInput.addEventListener('blur', function() {
+            if(!this.value.trim()) {
+                feedbackSpan.innerHTML = '❌ Field is compulsory!';
+                feedbackSpan.style.color = '#ef4444';
+            }
+        });
+    }
+    
+    // Subject Validation on Blur
+    const gSubInput = document.getElementById('gSubject');
+    if (gSubInput) {
+        gSubInput.addEventListener('blur', function() {
+            const fb = document.getElementById('subjectFeedback');
+            if(!this.value.trim()) {
+                fb.innerHTML = '❌ Field is compulsory!';
+                fb.style.color = '#ef4444';
+            } else {
+                fb.innerHTML = '';
+            }
+        });
+    }
+</script>
 </body>
 </html>

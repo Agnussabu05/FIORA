@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../includes/db.php';
+require_once '../includes/functions.php'; // Logging helper
 
 // Access Control
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
@@ -189,24 +190,59 @@ try {
     $users_report = $stmt->fetchAll();
 
     // --- Study Group Verification Logic ---
-    if (isset($_POST['verify_group']) || isset($_POST['reject_group'])) {
+    if (isset($_POST['verify_group'])) {
         $group_id = $_POST['group_id'];
-        $action = isset($_POST['verify_group']) ? 'approve' : 'reject';
+        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?");
+        $stmt->execute([$group_id]);
         
-        // Fetch name for message
-        $name_stmt = $pdo->prepare("SELECT name FROM study_groups WHERE id = ?");
-        $name_stmt->execute([$group_id]);
-        $gn = $name_stmt->fetch();
+        // Notify leader (mock)
+        $_SESSION['admin_msg'] = "Group verified successfully! 🛡️";
+        log_activity($pdo, $_SESSION['user_id'], 'admin_verify_group', "Verified and activated group ID $group_id", $group_id);
+        header("Location: index.php?tab=study");
+        exit;
+    }
+
+    if (isset($_POST['reject_group'])) {
+        $group_id = $_POST['group_id'];
+        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'forming' WHERE id = ?"); // Revert to forming so they can fix
+        $stmt->execute([$group_id]);
         
-        if ($action === 'approve') {
-            $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?")->execute([$group_id]);
-            $_SESSION['admin_msg'] = "Success! Study collective '{$gn['name']}' has been verified and granted access. 🎓✅";
-        } else {
-            // Reject: set back to 'forming' so they can try again, or 'rejected' if we want to block.
-            // Let's use 'forming' so they can fix issues.
-            $pdo->prepare("UPDATE study_groups SET status = 'forming' WHERE id = ?")->execute([$group_id]);
-            $_SESSION['admin_msg'] = "Group '{$gn['name']}' returned to forming stage. ↩️";
-        }
+        $_SESSION['admin_msg'] = "Group rejected. Status reverted to 'forming'. ⚠️";
+        log_activity($pdo, $_SESSION['user_id'], 'admin_reject_group', "Rejected group ID $group_id", $group_id);
+        header("Location: index.php?tab=study");
+        exit;
+    }
+    
+    if (isset($_POST['delete_group'])) {
+        $group_id = $_POST['group_id'];
+        
+        // Cascade delete (Clean up all related data)
+        $pdo->prepare("DELETE FROM study_group_members WHERE group_id = ?")->execute([$group_id]);
+        $pdo->prepare("DELETE FROM study_requests WHERE group_id = ?")->execute([$group_id]);
+        $pdo->prepare("DELETE FROM study_groups WHERE id = ?")->execute([$group_id]);
+        
+        $_SESSION['admin_msg'] = "Tribe deleted permanently. 🛑";
+        log_activity($pdo, $_SESSION['user_id'], 'admin_delete_group', "Deleted group ID $group_id", $group_id);
+        
+        header("Location: index.php?tab=study");
+        exit;
+    }
+
+    // --- Member Removal Logic ---
+    if (isset($_POST['remove_member'])) {
+        $group_id = $_POST['group_id'];
+        $member_username = $_POST['member_username'];
+        
+        // Get user_id for logging
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+        $stmt->execute([$member_username]);
+        $target_uid = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("DELETE sgm FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ? AND u.username = ?");
+        $stmt->execute([$group_id, $member_username]);
+        
+        $_SESSION['admin_msg'] = "Member '{$member_username}' has been removed from the tribe. 🗑️";
+        log_activity($pdo, $_SESSION['user_id'], 'admin_remove_member', "Removed user $member_username from group ID $group_id", $group_id);
         
         header("Location: index.php?tab=study");
         exit;
@@ -225,10 +261,19 @@ try {
     $active_groups_list = $pdo->query("SELECT * FROM study_groups WHERE status = 'active' ORDER BY created_at DESC")->fetchAll();
     $active_group_members = [];
     foreach ($active_groups_list as $ag) {
-        $stmt = $pdo->prepare("SELECT u.username, sgm.role FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ?");
+        $stmt = $pdo->prepare("SELECT u.username, sgm.role, u.id as user_id FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ?");
         $stmt->execute([$ag['id']]);
         $active_group_members[$ag['id']] = $stmt->fetchAll();
     }
+    
+    // System Logs
+    $logs = $pdo->query("
+        SELECT l.*, u.username 
+        FROM system_logs l 
+        LEFT JOIN users u ON l.user_id = u.id 
+        ORDER BY l.created_at DESC 
+        LIMIT 50
+    ")->fetchAll();
 
 } catch (PDOException $e) {
     // Handle error gracefully
@@ -648,7 +693,13 @@ $tab = $_GET['tab'] ?? 'dashboard';
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
                             <?php foreach ($active_groups_list as $group): ?>
                                 <div style="background: rgba(0,0,0,0.02); padding: 20px; border-radius: 15px; border: 1px dashed rgba(0,0,0,0.1);">
-                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 2px;">🛡️ <?php echo htmlspecialchars($group['name']); ?></div>
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">
+                                        <div style="font-weight: 700; font-size: 1.1rem;">🛡️ <?php echo htmlspecialchars($group['name']); ?></div>
+                                        <form method="POST" onsubmit="return confirm('ADMIN WARNING: This will permanently delete this tribe and all its history. Continue?');" style="margin:0;">
+                                            <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
+                                            <button type="submit" name="delete_group" style="background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" title="Delete Tribe permanently">🗑️</button>
+                                        </form>
+                                    </div>
                                     <div style="font-weight: 600; color: var(--primary); font-size: 0.9rem; margin-bottom: 8px;">📖 <?php echo htmlspecialchars($group['subject'] ?: 'General'); ?></div>
                                     
                                     <div style="margin-bottom: 10px;">
@@ -658,9 +709,18 @@ $tab = $_GET['tab'] ?? 'dashboard';
                                         </button>
                                         <div class="personnel-list" style="margin-top: 10px;">
                                             <?php foreach ($active_group_members[$group['id']] as $member): ?>
-                                                <div style="font-size: 0.85rem; display: flex; justify-content: space-between; margin-bottom: 5px; background: rgba(255,255,255,0.4); padding: 5px 10px; border-radius: 8px;">
-                                                    <span style="font-weight: 700;">👤 <?php echo htmlspecialchars($member['username']); ?></span>
-                                                    <span style="font-size: 0.65rem; opacity: 0.6; font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 5px;"><?php echo strtoupper($member['role']); ?></span>
+                                                <div style="font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; background: rgba(255,255,255,0.4); padding: 5px 10px; border-radius: 8px;">
+                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                        <span style="font-weight: 700;">👤 <?php echo htmlspecialchars($member['username']); ?></span>
+                                                        <span style="font-size: 0.65rem; opacity: 0.6; font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 5px;"><?php echo strtoupper($member['role']); ?></span>
+                                                    </div>
+                                                    <form method="POST" onsubmit="return confirm('Remove this member from the tribe?')" style="margin: 0;">
+                                                        <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
+                                                        <input type="hidden" name="member_username" value="<?php echo $member['username']; ?>">
+                                                        <button type="submit" name="remove_member" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.8rem; padding: 0; display: flex; align-items: center;" title="Remove Member">
+                                                            ✕
+                                                        </button>
+                                                    </form>
                                                 </div>
                                             <?php endforeach; ?>
                                         </div>
@@ -672,6 +732,42 @@ $tab = $_GET['tab'] ?? 'dashboard';
                     </div>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
+
+                    <?php if ($tab == 'logs'): ?>
+                    <div style="background: white; border-radius: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); overflow: hidden; border: 1px solid rgba(0,0,0,0.05);">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                    <th style="padding: 15px; text-align: left; font-size: 0.8rem; text-transform: uppercase;">Time</th>
+                                    <th style="padding: 15px; text-align: left; font-size: 0.8rem; text-transform: uppercase;">User</th>
+                                    <th style="padding: 15px; text-align: left; font-size: 0.8rem; text-transform: uppercase;">Action</th>
+                                    <th style="padding: 15px; text-align: left; font-size: 0.8rem; text-transform: uppercase;">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($logs as $log): ?>
+                                    <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.2s;">
+                                        <td style="padding: 15px; color: #64748b; font-size: 0.9rem; white-space: nowrap;">
+                                            <?php echo date('M j, H:i', strtotime($log['created_at'])); ?>
+                                        </td>
+                                        <td style="padding: 15px; font-weight: 700; color: #334155;">
+                                            <?php echo htmlspecialchars($log['username'] ?: 'Unknown'); ?>
+                                        </td>
+                                        <td style="padding: 15px;">
+                                            <span style="background: #f1f5f9; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; color: #475569; text-transform: uppercase;">
+                                                <?php echo htmlspecialchars($log['action']); ?>
+                                            </span>
+                                        </td>
+                                        <td style="padding: 15px; color: #475569; font-size: 0.9rem;">
+                                            <?php echo htmlspecialchars($log['details']); ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
                 <?php endif; ?>
 
             </div>
