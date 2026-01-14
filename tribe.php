@@ -69,6 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_msg'])) {
 // 2.5 Handle Meet Scheduling (New Table)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['schedule_meet']) && !empty($_POST['meet_url']) && !empty($_POST['scheduled_time'])) {
+        // Enforce Active Status
+        if ($group['status'] !== 'active') {
+            header("Location: tribe.php?id=$group_id"); // Silent fail or could add msg
+            exit;
+        }
+
         $url = trim($_POST['meet_url']);
         $time = $_POST['scheduled_time'];
         $title = trim($_POST['session_title'] ?: 'Study Session');
@@ -88,7 +94,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     
-    // (Old End Meet logic removed/deprecated in favor of list management, but sticking to simple for now)
+    // (Old End Meet logic removed/deprecated)
+    
+    // 2.9 Handle "Open/Unlock" Session (Leader only)
+    if (isset($_POST['open_session_id']) && $group['my_role'] == 'leader') {
+        $sid = $_POST['open_session_id'];
+        // Removed group_id check for robustness, ID is unique anyway
+        $pdo->prepare("UPDATE study_group_sessions SET status = 'live' WHERE id = ?")->execute([$sid]);
+        
+        // Notify
+        $sysMsg = "🔓 The room is now open! Join in.";
+        $pdo->prepare("INSERT INTO study_group_messages (group_id, user_id, message) VALUES (?, ?, ?)")
+            ->execute([$group_id, $user_id, $sysMsg]);
+            
+        header("Location: tribe.php?id=$group_id");
+        exit;
+    }
+    // 2.10 Handle "Lock" Session (Leader only)
+    if (isset($_POST['lock_session_id']) && $group['my_role'] == 'leader') {
+        $sid = $_POST['lock_session_id'];
+        $pdo->prepare("UPDATE study_group_sessions SET status = 'locked' WHERE id = ?")->execute([$sid]);
+        
+        // Notify
+        $sysMsg = "🔒 The room is temporarily locked.";
+        $pdo->prepare("INSERT INTO study_group_messages (group_id, user_id, message) VALUES (?, ?, ?)")
+            ->execute([$group_id, $user_id, $sysMsg]);
+            
+        header("Location: tribe.php?id=$group_id");
+        exit;
+    }
 }
 
 // 2.8 Fetch Upcoming Sessions
@@ -304,9 +338,13 @@ $page = 'study';
                                 </a>
                              <?php endif; ?>
 
-                            <?php if($group['my_role'] == 'leader'): ?>
+                            <?php if($group['my_role'] == 'leader' && $group['status'] == 'active'): ?>
                                 <button onclick="document.getElementById('scheduleModal').style.display='flex'" class="btn" style="background: #fff; border: 1px dashed #cbd5e1; color: #475569; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.85rem;">
                                     + Schedule Live
+                                </button>
+                            <?php elseif($group['my_role'] == 'leader' && $group['status'] != 'active'): ?>
+                                <button disabled class="btn" style="background: #e2e8f0; color: #94a3b8; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.8rem; cursor: not-allowed;" title="Wait for Admin Approval">
+                                    ❌ Live Disabled
                                 </button>
                             <?php endif; ?>
                             <div style="font-size: 1.5rem; margin-left: 10px;">🏰</div>
@@ -365,17 +403,52 @@ $page = 'study';
                         <?php if($sessions): ?>
                             <div style="display: flex; flex-direction: column; gap: 10px;">
                                 <?php foreach($sessions as $sess): 
-                                    $is_live = (time() >= strtotime($sess['scheduled_at']));
+                                    // Logic: Members can join if time is close OR if status is 'live' (unlocked by leader)
+                                    // BUT NOT if status is 'locked' (even if time is reached)
+                                    $link_opens_at = strtotime($sess['scheduled_at']) - 600; // 10 mins before
+                                    $is_open_by_time = (time() >= $link_opens_at);
+                                    $is_open_manually = ($sess['status'] == 'live');
+                                    $is_locked = ($sess['status'] == 'locked');
+                                    
+                                    // Members can join if (Time OR Manual) AND Not Locked
+                                    $member_can_join = ($is_open_by_time || $is_open_manually) && !$is_locked;
                                 ?>
                                 <div style="background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                    <div style="font-size: 0.9rem; font-weight: 700; color: #334155;"><?php echo htmlspecialchars($sess['title']); ?></div>
+                                    <div style="font-size: 0.9rem; font-weight: 700; color: #334155;">
+                                        <?php echo htmlspecialchars($sess['title']); ?>
+                                        <?php if($is_open_manually) echo '<span style="color:#166534; font-size:0.7rem; background:#dcfce7; padding:2px 6px; border-radius:4px; margin-left:6px;">LIVE</span>'; ?>
+                                    </div>
                                     <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 8px;">
                                         <?php echo date('M j, g:i A', strtotime($sess['scheduled_at'])); ?>
                                     </div>
-                                    <?php if ($is_live): ?>
-                                        <a href="<?php echo htmlspecialchars($sess['meet_link']); ?>" target="_blank" style="display: block; text-align: center; background: #ef4444; color: white; padding: 6px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">JOIN LIVE</a>
+                                    
+                                    <?php if ($member_can_join || $group['my_role'] == 'leader'): ?>
+                                        <a href="<?php echo htmlspecialchars($sess['meet_link']); ?>" target="_blank" style="display: block; text-align: center; background: #ef4444; color: white; padding: 6px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 700;">
+                                            JOIN ROOM <?php if(!$member_can_join) echo '(Leader Access)'; ?>
+                                        </a>
+                                        
+                                        <!-- Leader Unlock/Lock Option -->
+                                        <?php if($group['my_role'] == 'leader'): ?>
+                                            <?php if(!$member_can_join): ?>
+                                                <form method="POST" style="margin-top: 6px;">
+                                                    <input type="hidden" name="open_session_id" value="<?php echo $sess['id']; ?>">
+                                                    <button style="width: 100%; border: 1px dashed #2563eb; background: #eff6ff; color: #2563eb; padding: 4px; border-radius: 6px; font-size: 0.75rem; cursor: pointer;">
+                                                        🔓 Unlock for Squad Now
+                                                    </button>
+                                                </form>
+                                            <?php elseif($is_open_manually): ?>
+                                                <form method="POST" style="margin-top: 6px;">
+                                                    <input type="hidden" name="lock_session_id" value="<?php echo $sess['id']; ?>">
+                                                    <button style="width: 100%; border: 1px dashed #ef4444; background: #fef2f2; color: #ef4444; padding: 4px; border-radius: 6px; font-size: 0.75rem; cursor: pointer;">
+                                                        🔒 Lock Again
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
                                     <?php else: ?>
-                                        <button disabled style="width: 100%; border: none; background: #e2e8f0; color: #94a3b8; padding: 6px; border-radius: 6px; font-size: 0.8rem;">Starting Soon</button>
+                                        <button disabled style="width: 100%; border: none; background: #e2e8f0; color: #94a3b8; padding: 6px; border-radius: 6px; font-size: 0.75rem;">
+                                            🔒 Opens 10m before start
+                                        </button>
                                     <?php endif; ?>
                                 </div>
                                 <?php endforeach; ?>

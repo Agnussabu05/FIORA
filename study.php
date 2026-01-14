@@ -11,8 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $date = $_POST['date'];
     $notes = $_POST['notes'];
     
-    $stmt = $pdo->prepare("INSERT INTO study_sessions (user_id, subject, duration_minutes, session_date, notes) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$user_id, $subject, $duration, $date, $notes]);
+    $meet_link = $_POST['meet_link'] ?? null;
+    
+    $stmt = $pdo->prepare("INSERT INTO study_sessions (user_id, subject, duration_minutes, session_date, notes, meet_link) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$user_id, $subject, $duration, $date, $notes, $meet_link]);
     
     log_activity($pdo, $user_id, 'create_session', "Planned session: $subject");
     
@@ -29,10 +31,36 @@ if (isset($_GET['delete'])) {
     exit;
 }
 
-// Fetch Sessions
-$stmt = $pdo->prepare("SELECT * FROM study_sessions WHERE user_id = ? ORDER BY session_date ASC");
+// Handle Mark as Complete
+if (isset($_GET['complete'])) {
+    $id = $_GET['complete'];
+    $stmt = $pdo->prepare("UPDATE study_sessions SET status = 'completed', completed_at = NOW() WHERE id = ?");
+    $stmt->execute([$id]);
+    
+    // Log for gamification/stats
+    log_activity($pdo, $user_id, 'complete_session', "Completed solo study session ID $id");
+    
+    header("Location: study.php");
+    exit;
+}
+
+// Fetch Planned Sessions (Not Completed)
+$stmt = $pdo->prepare("SELECT * FROM study_sessions WHERE user_id = ? AND status = 'planned' ORDER BY session_date ASC");
 $stmt->execute([$user_id]);
 $sessions = $stmt->fetchAll();
+
+// Fetch Progress Stats
+$stats_stmt = $pdo->prepare("
+    SELECT 
+        COUNT(*) as total_completed,
+        SUM(duration_minutes) as total_minutes
+    FROM study_sessions 
+    WHERE user_id = ? AND status = 'completed'
+");
+$stats_stmt->execute([$user_id]);
+$my_stats = $stats_stmt->fetch();
+$total_hours = $my_stats['total_minutes'] ? round($my_stats['total_minutes'] / 60, 1) : 0;
+
 
 // Study Collective Logic
 $user_stmt = $pdo->prepare("SELECT interested_study FROM users WHERE id = ?");
@@ -109,13 +137,18 @@ if (isset($_POST['update_request'])) {
         $req = $req_stmt->fetch();
         
         if ($req['group_id']) {
-            // Determine who is joining: 
-            // If the person accepting (current user) is the receiver, then the sender is joining.
-            // If the person accepting (current user) is the sender, then the receiver is joining (less common but possible).
-            // Usually, receiver accepts an invite (sender invites) OR receiver (leader) accepts a join request (sender requests).
-            // In both cases, we need to add the person who is NOT already in the group members.
+            // CORRECT LOGIC:
+            // Check if Sender is already in the group (e.g. Leader sent an invite)
+            $chk_sender = $pdo->prepare("SELECT 1 FROM study_group_members WHERE group_id = ? AND user_id = ?");
+            $chk_sender->execute([$req['group_id'], $req['sender_id']]);
             
-            $person_joining = ($user_id == $req['receiver_id']) ? $req['sender_id'] : $req['receiver_id'];
+            if ($chk_sender->fetch()) {
+                 // Sender is already in the group, so it was an Invite -> Receiver (Invitee) joins
+                 $person_joining = $req['receiver_id'];
+            } else {
+                 // Sender is NOT in the group, so it was a Join Request -> Sender (Requester) joins
+                 $person_joining = $req['sender_id'];
+            }
             
             // Avoid duplicate members
             $check = $pdo->prepare("SELECT 1 FROM study_group_members WHERE group_id = ? AND user_id = ?");
@@ -258,7 +291,8 @@ $received_req_stmt = $pdo->prepare("
     FROM study_requests sr 
     JOIN users u ON sr.sender_id = u.id 
     LEFT JOIN study_groups sg ON sr.group_id = sg.id
-    WHERE sr.receiver_id = ? AND sr.status = 'pending'
+    WHERE sr.receiver_id = ?
+    ORDER BY CASE WHEN sr.status = 'pending' THEN 0 ELSE 1 END, sr.created_at DESC
 ");
 $received_req_stmt->execute([$user_id]);
 $received_requests = $received_req_stmt->fetchAll();
@@ -275,14 +309,16 @@ $all_active_groups = $active_groups_stmt->fetchAll();
 $discover_stmt = $pdo->prepare("
     SELECT sg.*, 
     (SELECT u.username FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = sg.id AND sgm.role = 'leader') as leader_name,
+    (SELECT user_id FROM study_group_members WHERE group_id = sg.id AND role = 'leader' LIMIT 1) as leader_id,
     (SELECT COUNT(*) FROM study_group_members WHERE group_id = sg.id) as member_count,
+    (SELECT GROUP_CONCAT(u.username SEPARATOR ', ') FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = sg.id) as public_members,
     (SELECT 1 FROM study_group_members WHERE group_id = sg.id AND user_id = ? LIMIT 1) as is_member,
-    (SELECT 1 FROM study_requests WHERE group_id = sg.id AND sender_id = ? AND status = 'pending' LIMIT 1) as is_pending
+    (SELECT 1 FROM study_requests WHERE group_id = sg.id AND (sender_id = ? OR receiver_id = ?) AND status = 'pending' LIMIT 1) as is_pending
     FROM study_groups sg 
     WHERE sg.status IN ('forming', 'active') 
     ORDER BY sg.created_at DESC
 ");
-$discover_stmt->execute([$user_id, $user_id]);
+$discover_stmt->execute([$user_id, $user_id, $user_id]);
 $discover_groups = $discover_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -454,6 +490,21 @@ $discover_groups = $discover_stmt->fetchAll();
         .badge-active { background: #dcfce7; color: #166534; }
         .badge-forming { background: #e0e7ff; color: #3730a3; }
         .badge-pending { background: #ffedd5; color: #9a3412; }
+
+        #addSessionModal.active,
+        #requestsModal.active {
+            display: flex !important;
+        }
+
+        .modal-overlay {
+            position: fixed; 
+            inset: 0; 
+            background: rgba(0,0,0,0.5); 
+            display: none; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -494,25 +545,130 @@ $discover_groups = $discover_stmt->fetchAll();
 
                         <?php if ($interested_study): ?>
                             
-                            <!-- Invites -->
-                            <?php if (!empty($received_requests)): ?>
-                                <div style="margin-bottom: 24px; background: #fffbeb; border: 1px solid #fcd34d; padding: 16px; border-radius: 12px;">
-                                    <div class="section-title" style="color: #92400e; margin-bottom: 12px;">Pending Invites</div>
-                                    <?php foreach($received_requests as $req): ?>
-                                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
-                                            <div>
-                                                <div style="font-weight: 700; color: #92400e;"><?php echo htmlspecialchars($req['group_name']); ?></div>
-                                                <div style="font-size: 0.85rem; color: #b45309;">From: <?php echo htmlspecialchars($req['sender_name']); ?></div>
+                            <!-- Requests Modal Trigger -->
+                            <div style="margin-bottom: 25px;">
+                                <button onclick="document.getElementById('requestsModal').classList.add('active')" class="btn" style="width: 100%; background: white; border: 1px solid #cbd5e1; color: #334155; padding: 12px; border-radius: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                                    <span>📨 Manage Requests</span>
+                                    <?php 
+                                        $pending_count = 0;
+                                        if ($received_requests) {
+                                            foreach($received_requests as $r) if($r['status']=='pending') $pending_count++;
+                                        }
+                                        if ($pending_count > 0): 
+                                    ?>
+                                        <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;"><?php echo $pending_count; ?> New</span>
+                                    <?php else: ?>
+                                        <span style="color: #94a3b8;">→</span>
+                                    <?php endif; ?>
+                                </button>
+                            </div>
+
+                            <!-- Requests Modal -->
+                            <div id="requestsModal" class="modal-overlay" onclick="if(event.target === this) this.classList.remove('active')">
+                                <div class="card-premium" style="width: 500px; max-width: 90vw; background: white; max-height: 80vh; overflow-y: auto;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                        <h3 style="margin: 0;">Study Requests</h3>
+                                        <button onclick="document.getElementById('requestsModal').classList.remove('active')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+                                    </div>
+
+                                    <!-- Tabs -->
+                                    <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
+                                        <button onclick="switchTab('incoming')" id="tab-incoming" class="btn" style="background: #e0f2fe; color: #0284c7; flex: 1; padding: 8px;">Incoming (Inbox)</button>
+                                        <button onclick="switchTab('outgoing')" id="tab-outgoing" class="btn" style="background: transparent; color: #64748b; flex: 1; padding: 8px;">Outgoing (Sent)</button>
+                                    </div>
+
+                                    <!-- Incoming Content -->
+                                    <div id="content-incoming">
+                                        <?php if ($received_requests): ?>
+                                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                                <?php foreach($received_requests as $req): 
+                                                    $is_pending = ($req['status'] === 'pending');
+                                                ?>
+                                                    <div class="request-card" style="padding: 12px 16px; border-radius: 12px; border: 1px solid #e2e8f0; <?php echo !$is_pending ? 'opacity: 0.7; background: #f8fafc;' : 'background: white; border-color: #fcd34d;'; ?>">
+                                                        <div style="margin-bottom: 8px;">
+                                                            <div style="font-weight: 700; color: #1e293b;">
+                                                                <?php echo htmlspecialchars($req['group_name'] ?: $req['group_name_actual']); ?>
+                                                                <?php if ($req['subject_name']): ?>
+                                                                    <span style="font-weight: 400; color: #64748b;">• <?php echo htmlspecialchars($req['subject_name']); ?></span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div style="font-size: 0.85rem; color: #b45309;">
+                                                                From: <?php echo htmlspecialchars($req['sender_name']); ?> • 
+                                                                <span style="color: #64748b; font-size: 0.75rem;"><?php echo date('M j', strtotime($req['created_at'])); ?></span>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <?php if ($is_pending): ?>
+                                                            <form method="POST" style="display: flex; gap: 8px;">
+                                                                <input type="hidden" name="request_id" value="<?php echo $req['id']; ?>">
+                                                                <button name="update_request" value="accepted" class="btn" style="flex: 1; padding: 8px; background: #166534; color: white;">Accept</button>
+                                                                <button name="update_request" value="rejected" class="btn" style="flex: 1; padding: 8px; background: rgba(0,0,0,0.05); color: #64748b;">Ignore</button>
+                                                            </form>
+                                                        <?php else: ?>
+                                                            <div style="font-size: 0.8rem; font-weight: 600; 
+                                                                <?php 
+                                                                    if($req['status']=='accepted') echo 'color: #166534;">✅ Accepted';
+                                                                    else echo 'color: #991b1b;">❌ Rejected';
+                                                                ?>
+                                                            </div>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endforeach; ?>
                                             </div>
-                                            <form method="POST" style="display: flex; gap: 8px;">
-                                                <input type="hidden" name="request_id" value="<?php echo $req['id']; ?>">
-                                                <button name="update_request" value="accepted" class="btn" style="padding: 6px 14px; background: #166534; color: white;">Accept</button>
-                                                <button name="update_request" value="rejected" class="btn" style="padding: 6px 14px; background: rgba(0,0,0,0.1);">Ignore</button>
-                                            </form>
-                                        </div>
-                                    <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <div style="text-align: center; color: #94a3b8; padding: 20px;">No incoming requests.</div>
+                                        <?php endif; ?>
+                                    </div>
+
+                                    <!-- Outgoing Content -->
+                                    <div id="content-outgoing" style="display: none;">
+                                        <?php if ($sent_requests): ?>
+                                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                                <?php foreach($sent_requests as $key => $data): ?>
+                                                    <div class="request-card" style="padding: 12px 16px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc;">
+                                                        <div style="font-weight: 700; color: #334155; margin-bottom: 4px;">
+                                                            <?php echo htmlspecialchars($data['group_name']); ?>
+                                                            <span style="font-weight: 400; color: #94a3b8;">(<?php echo htmlspecialchars($data['subject_name']); ?>)</span>
+                                                        </div>
+                                                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 8px;">Invites sent to:</div>
+                                                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                                            <?php foreach($data['recipients'] as $r): ?>
+                                                                <span style="background: white; border: 1px solid #cbd5e1; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px;">
+                                                                    <?php echo htmlspecialchars($r['receiver_name']); ?>
+                                                                    <?php if($r['status'] == 'pending'): ?>
+                                                                        <span title="Pending" style="color: #ea580c;">⏳</span>
+                                                                        <form method="POST" style="display: inline;">
+                                                                            <input type="hidden" name="request_id" value="<?php echo $r['id']; ?>">
+                                                                            <button name="cancel_request" style="border: none; background: none; color: #ef4444; font-size: 0.7rem; cursor: pointer; padding: 0;">✕</button>
+                                                                        </form>
+                                                                    <?php elseif($r['status'] == 'rejected'): ?>
+                                                                        <span title="Rejected" style="color: #ef4444;">❌</span>
+                                                                    <?php endif; ?>
+                                                                </span>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <div style="text-align: center; color: #94a3b8; padding: 20px;">No sent requests found.</div>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
-                            <?php endif; ?>
+                            </div>
+
+                            <script>
+                                function switchTab(tab) {
+                                    document.getElementById('content-incoming').style.display = tab === 'incoming' ? 'block' : 'none';
+                                    document.getElementById('content-outgoing').style.display = tab === 'outgoing' ? 'block' : 'none';
+                                    
+                                    document.getElementById('tab-incoming').style.background = tab === 'incoming' ? '#e0f2fe' : 'transparent';
+                                    document.getElementById('tab-incoming').style.color = tab === 'incoming' ? '#0284c7' : '#64748b';
+                                    
+                                    document.getElementById('tab-outgoing').style.background = tab === 'outgoing' ? '#e0f2fe' : 'transparent';
+                                    document.getElementById('tab-outgoing').style.color = tab === 'outgoing' ? '#0284c7' : '#64748b';
+                                }
+                            </script>
 
                             <!-- Create Group Wizard -->
                             <div class="wizard-container">
@@ -524,33 +680,8 @@ $discover_groups = $discover_stmt->fetchAll();
                                         </div>
                                     </div>
                                     <div class="wizard-body">
-                                        <!-- Step 1 -->
+                                        <!-- Step 1: Group Details (Swapped) -->
                                         <div class="step-page active" id="step1">
-                                            <div style="margin-bottom: 20px; font-weight: 600; color: #475569;">Who are you studying with?</div>
-                                            <?php if ($potential_partners): ?>
-                                            <div class="user-grid">
-                                                <?php foreach($potential_partners as $p): ?>
-                                                <label class="user-select-card">
-                                                    <input type="checkbox" name="receiver_ids[]" value="<?php echo $p['id']; ?>" data-name="<?php echo htmlspecialchars($p['username']); ?>">
-                                                    <div class="user-card-inner">
-                                                        <div class="avatar-lg"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
-                                                        <div style="font-size: 0.9rem; font-weight: 600; color: #334155;"><?php echo htmlspecialchars($p['username']); ?></div>
-                                                    </div>
-                                                </label>
-                                                <?php endforeach; ?>
-                                            </div>
-                                            <div style="text-align: right; margin-top: 24px;">
-                                                <button type="button" onclick="nextStep(2)" class="btn btn-primary">Next: Details →</button>
-                                            </div>
-                                            <?php else: ?>
-                                                <div style="text-align: center; color: #94a3b8; padding: 20px;">
-                                                    Everyones hiding! 🙈<br>No other students are currently 'Visible'.
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-
-                                        <!-- Step 2 -->
-                                        <div class="step-page" id="step2">
                                             <div class="form-group">
                                                 <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">
                                                     TRIBE NAME <span id="nameFeedback" style="float: right; font-weight: 600;"></span>
@@ -564,13 +695,43 @@ $discover_groups = $discover_stmt->fetchAll();
                                                 <input type="text" name="subject_name" id="gSubject" class="form-input" placeholder="e.g. Advanced Calculus" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
                                             </div>
                                             <div class="form-group" style="margin-top: 15px;">
-                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">GOAL / DESCRIPTION</label>
+                                                <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                                                    GOAL / DESCRIPTION <span id="descFeedback" style="float: right; font-weight: 600;"></span>
+                                                </label>
                                                 <textarea name="group_desc" id="gDesc" class="form-input" placeholder="What is this tribe's mission?" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; height: 80px;"></textarea>
+                                            </div>
+                                            <div style="text-align: right; margin-top: 24px;">
+                                                <button type="button" onclick="nextStep(2)" class="btn btn-primary">Next: Invite Members →</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Step 2: Member Selection (Swapped) -->
+                                        <div class="step-page" id="step2">
+                                            <div style="margin-bottom: 20px; font-weight: 600; color: #475569;">Invite Friends</div>
+                                            <?php if ($potential_partners): ?>
+                                            <div class="user-grid">
+                                                <?php foreach($potential_partners as $p): ?>
+                                                <label class="user-select-card">
+                                                    <input type="checkbox" name="receiver_ids[]" value="<?php echo $p['id']; ?>" data-name="<?php echo htmlspecialchars($p['username']); ?>">
+                                                    <div class="user-card-inner">
+                                                        <div class="avatar-lg"><?php echo strtoupper(substr($p['username'], 0, 1)); ?></div>
+                                                        <div style="font-size: 0.9rem; font-weight: 600; color: #334155;"><?php echo htmlspecialchars($p['username']); ?></div>
+                                                    </div>
+                                                </label>
+                                                <?php endforeach; ?>
                                             </div>
                                             <div style="display: flex; justify-content: space-between; margin-top: 24px;">
                                                 <button type="button" onclick="nextStep(1)" class="btn btn-secondary">Back</button>
                                                 <button type="button" onclick="nextStep(3)" class="btn btn-primary">Next: Review →</button>
                                             </div>
+                                            <?php else: ?>
+                                                <div style="text-align: center; color: #94a3b8; padding: 20px;">
+                                                    Everyones hiding! 🙈<br>No other students are currently 'Visible'.
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; margin-top: 24px;">
+                                                    <button type="button" onclick="nextStep(1)" class="btn btn-secondary">Back</button>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
 
                                         <!-- Step 3 -->
@@ -606,7 +767,7 @@ $discover_groups = $discover_stmt->fetchAll();
                                             <div style="font-weight: 700; color: #1e293b; font-size: 1.1rem;">
                                                 <a href="tribe.php?id=<?php echo $g['id']; ?>" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px;">
                                                     <?php echo htmlspecialchars($g['name']); ?>
-                                                    <span style="font-size: 0.8rem; background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 12px; font-weight: 600;">Enter 🚪</span>
+                                                    <span style="font-size: 0.8rem; background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 12px; font-weight: 600;">🚪</span>
                                                 </a>
                                             </div>
                                             <div style="color: #64748b; font-size: 0.9rem; font-weight: 600;">📖 <?php echo htmlspecialchars($g['subject']); ?></div>
@@ -632,6 +793,13 @@ $discover_groups = $discover_stmt->fetchAll();
                                             <?php elseif($g['status'] == 'forming'): ?>
                                                 <span class="badge badge-forming">Forming</span>
                                                 <?php if($g['my_role']=='leader'): ?>
+                                                    
+                                                    <?php if(!empty($g['rejection_reason'])): ?>
+                                                        <div style="background: #fef2f2; color: #ef4444; font-size: 0.8rem; padding: 8px; border-radius: 8px; margin-top: 8px; border: 1px solid #fecaca;">
+                                                            <strong>⚠️ Admin Note:</strong> <?php echo htmlspecialchars($g['rejection_reason']); ?>
+                                                        </div>
+                                                    <?php endif; ?>
+
                                                     <?php 
                                                         $member_count = count(explode('|', $g['members_list']));
                                                         if ($member_count > 1): 
@@ -647,8 +815,14 @@ $discover_groups = $discover_stmt->fetchAll();
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             <?php else: ?>
-
                                                 <span class="badge badge-pending">Pending Admin</span>
+                                                <div style="background: #fff7ed; color: #9a3412; font-size: 0.8rem; padding: 8px; border-radius: 8px; margin-top: 8px; border: 1px solid #fed7aa; display: flex; align-items: center; gap: 6px;">
+                                                    <span style="font-size: 1rem;">⏳</span> 
+                                                    <div>
+                                                        <strong>Under Review:</strong><br>
+                                                        Waiting for Admin approval. Hang tight!
+                                                    </div>
+                                                </div>
                                             <?php endif; ?>
 
                                             <!-- Manage Buttons -->
@@ -692,15 +866,38 @@ $discover_groups = $discover_stmt->fetchAll();
                                             </div>
                                             
                                             <?php if ($dg['is_member']): ?>
-                                                <button disabled class="btn" style="background: #dcfce7; color: #166534; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #bbf7d0;">✅ Member</button>
+                                                <?php if ($dg['status'] == 'forming' && $dg['leader_id'] == $user_id && $dg['member_count'] > 1): ?>
+                                                    <form method="POST">
+                                                        <input type="hidden" name="group_id" value="<?php echo $dg['id']; ?>">
+                                                        <button name="submit_for_verification" class="btn" style="background: #334155; color: white; font-weight: 600; padding: 8px 16px; font-size: 0.85rem;">Request Approval 🚀</button>
+                                                    </form>
+                                                <?php elseif ($dg['status'] == 'forming' && $dg['leader_id'] == $user_id): ?>
+                                                    <div style="font-size: 0.7rem; color: #94a3b8; font-style: italic; text-align: right; max-width: 120px;">
+                                                        Need 1+ accepted member to Request Approval
+                                                        <button class="btn" style="background: #e2e8f0; color: #64748b; font-weight: 600; padding: 6px 12px; font-size: 0.8rem; margin-top: 4px; border: 1px solid #cbd5e1; cursor: not-allowed;">Wait for Members ⏳</button>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <button disabled class="btn" style="background: #dcfce7; color: #166534; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #bbf7d0;">✅ Member</button>
+                                                <?php endif; ?>
                                             <?php elseif ($dg['is_pending']): ?>
-                                                <button disabled class="btn" style="background: #ffedd5; color: #9a3412; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #fed7aa;">⏳ Requested</button>
+                                                <button disabled class="btn" style="background: #ffedd5; color: #9a3412; font-weight: 600; padding: 8px 16px; font-size: 0.85rem; cursor: default; border: 1px solid #fed7aa;">⏳ Pending...</button>
                                             <?php else: ?>
                                                 <form method="POST">
                                                     <input type="hidden" name="group_id" value="<?php echo $dg['id']; ?>">
                                                     <button name="join_group" class="btn" style="background: #eff6ff; color: #2563eb; font-weight: 600; padding: 8px 16px; font-size: 0.85rem;">Join Request 🚀</button>
                                                 </form>
                                             <?php endif; ?>
+                                        </div>
+
+                                        <!-- Show Members (Toggle) - Moved to bottom -->
+                                        <div style="margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                                            <button type="button" onclick="const list = this.nextElementSibling; if(list.style.display==='none'){list.style.display='block';this.innerText='Hide Squad 🔼';}else{list.style.display='none';this.innerText='👥 See Squad';}" 
+                                                    style="width: 100%; background: none; border: none; color: #64748b; font-size: 0.75rem; font-weight: 600; cursor: pointer; text-align: left; padding: 0;">
+                                                👥 See Squad
+                                            </button>
+                                            <div style="display: none; font-size: 0.75rem; color: #475569; padding-top: 6px; line-height: 1.4;">
+                                                <?php echo htmlspecialchars($dg['public_members']); ?>
+                                            </div>
                                         </div>
                                     </div>
                                 <?php endforeach; else: ?>
@@ -726,19 +923,43 @@ $discover_groups = $discover_stmt->fetchAll();
                         </div>
                     </div>
 
+                    <!-- Personal Progress -->
+                    <div style="margin-top: 24px; background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0;">
+                         <div style="font-size: 0.9rem; font-weight: 700; color: #475569; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                            <span>📈</span> My Progress
+                         </div>
+                         <div style="display: flex; justify-content: space-between; text-align: center;">
+                             <div>
+                                 <div style="font-size: 1.5rem; font-weight: 800; color: #3b82f6;"><?php echo $my_stats['total_completed']; ?></div>
+                                 <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Sessions Done</div>
+                             </div>
+                             <div style="width: 1px; background: #e2e8f0;"></div>
+                             <div>
+                                 <div style="font-size: 1.5rem; font-weight: 800; color: #10b981;"><?php echo $total_hours; ?>h</div>
+                                 <div style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Total Focus</div>
+                             </div>
+                         </div>
+                    </div>
+
                     <!-- Upcoming Sessions -->
                     <div style="margin-top: 30px;">
                         <div class="section-title">Planned Sessions</div>
                         <?php if ($sessions): foreach($sessions as $s): ?>
                             <div class="session-row">
                                 <div class="session-icon">📅</div>
-                                <div>
+                                <div style="flex: 1;">
                                     <div style="font-weight: 700; color: #1e293b;"><?php echo htmlspecialchars($s['subject']); ?></div>
                                     <div style="font-size: 0.8rem; color: #64748b;">
                                         <?php echo date('M j, H:i', strtotime($s['session_date'])); ?> • <?php echo $s['duration_minutes']; ?>m
+                                        <?php if (!empty($s['meet_link'])): ?>
+                                             • <a href="<?php echo htmlspecialchars($s['meet_link']); ?>" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">🔗 Join Call</a>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
-                                <a href="?delete=<?php echo $s['id']; ?>" style="margin-left: auto; color: #cbd5e1; text-decoration: none;">✕</a>
+                                <div style="display: flex; gap: 5px; align-items: center;">
+                                    <a href="?complete=<?php echo $s['id']; ?>" class="btn" style="padding: 6px; background: #dcfce7; color: #166534; border-radius: 8px;" title="Mark as Complete">✓</a>
+                                    <a href="?delete=<?php echo $s['id']; ?>" style="color: #cbd5e1; text-decoration: none; padding: 6px;" title="Delete">✕</a>
+                                </div>
                             </div>
                         <?php endforeach; else: ?>
                             <div style="color: #94a3b8; font-style: italic; text-align: center; margin-top: 20px;">No solo sessions planned.</div>
@@ -754,13 +975,9 @@ $discover_groups = $discover_stmt->fetchAll();
         // Wizard
         function nextStep(n) {
             // Validation
+            
+            // Step 1 -> 2: Validate Name & Subject (Previously was at Step 3)
             if (n === 2) {
-                if (document.querySelectorAll('input[name="receiver_ids[]"]:checked').length === 0) {
-                    alert("Please pick at least one partner."); return;
-                }
-            }
-            if (n === 3) {
-                // Validate Name & Subject
                 const nameIn = document.getElementById('gName');
                 const subIn = document.getElementById('gSubject');
                 let valid = true;
@@ -769,15 +986,38 @@ $discover_groups = $discover_stmt->fetchAll();
                     document.getElementById('nameFeedback').innerHTML = '❌ Field is compulsory!';
                     document.getElementById('nameFeedback').style.color = '#ef4444';
                     valid = false;
+                } else {
+                    document.getElementById('nameFeedback').innerHTML = ''; 
                 }
+
                 if (!subIn.value.trim()) {
                     document.getElementById('subjectFeedback').innerHTML = '❌ Field is compulsory!';
                     document.getElementById('subjectFeedback').style.color = '#ef4444';
                     valid = false;
+                } else {
+                    document.getElementById('subjectFeedback').innerHTML = '';
+                }
+
+                const descIn = document.getElementById('gDesc');
+                if (!descIn.value.trim()) {
+                    document.getElementById('descFeedback').innerHTML = '❌ Field is compulsory!';
+                    document.getElementById('descFeedback').style.color = '#ef4444';
+                    valid = false;
+                } else {
+                    document.getElementById('descFeedback').innerHTML = '';
+                }
+                if (!valid) return;
+            }
+
+            // Step 2 -> 3: Validate Receivers (Previously was at Step 2, but check is now before entering Step 3)
+            if (n === 3) {
+                 if (document.querySelectorAll('input[name="receiver_ids[]"]:checked').length === 0) {
+                    alert("Please pick at least one partner."); return;
                 }
                 
-                if (!valid) return;
-
+                // Set Review Data
+                const nameIn = document.getElementById('gName');
+                const subIn = document.getElementById('gSubject');
                 document.getElementById('revName').innerText = nameIn.value || 'Untitled Group';
                 document.getElementById('revSub').innerText = subIn.value || 'General Study';
                 let count = document.querySelectorAll('input[name="receiver_ids[]"]:checked').length;
@@ -845,6 +1085,7 @@ $discover_groups = $discover_stmt->fetchAll();
                 <input type="text" name="subject" class="form-input" placeholder="Subject" required style="width: 100%; margin-bottom: 12px;">
                 <input type="number" name="duration" class="form-input" placeholder="Minutes" value="60" required style="width: 100%; margin-bottom: 12px;">
                 <input type="datetime-local" name="date" class="form-input" required style="width: 100%; margin-bottom: 12px;">
+                <input type="url" name="meet_link" class="form-input" placeholder="🔗 Video Call Link (Optional)" style="width: 100%; margin-bottom: 12px;">
                 <textarea name="notes" class="form-input" placeholder="Goals..." style="width: 100%; margin-bottom: 20px;"></textarea>
                 <button class="btn btn-primary" style="width: 100%;">Schedule</button>
             </form>

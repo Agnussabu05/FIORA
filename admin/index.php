@@ -192,7 +192,7 @@ try {
     // --- Study Group Verification Logic ---
     if (isset($_POST['verify_group'])) {
         $group_id = $_POST['group_id'];
-        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'active' WHERE id = ?");
+        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'active', rejection_reason = NULL WHERE id = ?");
         $stmt->execute([$group_id]);
         
         // Notify leader (mock)
@@ -204,8 +204,9 @@ try {
 
     if (isset($_POST['reject_group'])) {
         $group_id = $_POST['group_id'];
-        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'forming' WHERE id = ?"); // Revert to forming so they can fix
-        $stmt->execute([$group_id]);
+        $reason = "Details incomplete or guidelines not met. Please refine."; // Simple default reason
+        $stmt = $pdo->prepare("UPDATE study_groups SET status = 'forming', rejection_reason = ? WHERE id = ?"); 
+        $stmt->execute([$reason, $group_id]);
         
         $_SESSION['admin_msg'] = "Group rejected. Status reverted to 'forming'. ⚠️";
         log_activity($pdo, $_SESSION['user_id'], 'admin_reject_group', "Rejected group ID $group_id", $group_id);
@@ -726,6 +727,44 @@ $tab = $_GET['tab'] ?? 'dashboard';
                                         </div>
                                     </div>
                                     <div style="font-size: 0.7rem; color: #999; font-weight: 600; text-transform: uppercase;">Active since: <?php echo date('M j, Y', strtotime($group['created_at'])); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Rejected Tribes (Reverted to Forming) -->
+                    <?php 
+                        $rejected_groups = $pdo->query("SELECT * FROM study_groups WHERE status = 'forming' AND rejection_reason IS NOT NULL AND rejection_reason != '' ORDER BY created_at DESC")->fetchAll();
+                        if ($tab == 'study' && count($rejected_groups) > 0): 
+                    ?>
+                    <div style="margin-top: 40px; border-top: 2px solid rgba(0,0,0,0.05); padding-top: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="color: #9a3412; font-weight: 800;">🛑 Recently Rejected (Reverted)</h3>
+                            <span style="background: #fff7ed; color: #9a3412; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                                <?php echo count($rejected_groups); ?> Groups
+                            </span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                            <?php foreach ($rejected_groups as $group): ?>
+                                <div style="background: #fffafa; padding: 20px; border-radius: 15px; border: 1px dashed #fee2e2;">
+                                    <div style="font-weight: 700; font-size: 1.1rem; color: #7f1d1d;">🚫 <?php echo htmlspecialchars($group['name']); ?></div>
+                                    <div style="font-weight: 600; color: #9a3412; font-size: 0.9rem; margin-bottom: 8px;">📖 <?php echo htmlspecialchars($group['subject'] ?: 'General'); ?></div>
+                                    
+                                    <div style="background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 15px;">
+                                        <strong>Reason:</strong> <?php echo htmlspecialchars($group['rejection_reason']); ?>
+                                    </div>
+
+                                    <div style="font-size: 0.75rem; color: #999; font-weight: 600;">Status: Reverted to 'Forming'</div>
+                                    <div style="font-size: 0.75rem; color: #999;">Leader can modify and resubmit.</div>
+
+                                    <form method="POST" onsubmit="return confirm('Permanently delete this rejected tribe?');" style="margin-top: 15px;">
+                                        <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
+                                        <button type="submit" name="delete_group" class="btn" style="width: 100%; background: white; border: 1px solid #ef4444; color: #ef4444; padding: 6px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
+                                            🗑️ Delete Permanently
+                                        </button>
+                                    </form>
                                 </div>
                             <?php endforeach; ?>
                         </div>
