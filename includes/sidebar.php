@@ -29,6 +29,11 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="books.php" class="nav-link <?php echo ($page == 'books') ? 'active' : ''; ?>">
+                <span>🏛️</span> The Library
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="reading.php" class="nav-link <?php echo ($page == 'reading') ? 'active' : ''; ?>">
                 <span>📖</span> Reading
             </a>

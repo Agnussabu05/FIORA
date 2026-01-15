@@ -845,6 +845,56 @@ $discover_groups = $discover_stmt->fetchAll();
                             <?php endforeach; endif; ?>
                         </div>
 
+
+                        <!-- AI Note Summarizer -->
+                        <div style="margin-top: 40px; margin-bottom: 40px;">
+                            <div class="card-premium" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; border: 1px solid #334155;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 20px;">
+                                    <div>
+                                        <h2 style="font-size: 1.4rem; margin: 0; display: flex; align-items: center; gap: 10px; color: white;">
+                                            ✨ Magic Summarizer
+                                            <span style="font-size: 0.7rem; background: #6366f1; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Beta</span>
+                                        </h2>
+                                        <p style="color: #cbd5e1; font-size: 0.95rem; margin-top: 5px;">Upload a photo or PDF of your messy notes. We'll extract the gold.</p>
+                                    </div>
+                                    <div style="font-size: 2rem;">🧠</div>
+                                </div>
+
+                                <div class="upload-zone" id="summ-drop-zone" style="border: 2px dashed #475569; border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                    <input type="file" id="summ-file" accept="image/*,.pdf" multiple style="display: none;">
+                                    <div style="font-size: 2rem; margin-bottom: 10px;">📂</div>
+                                    <div style="font-weight: 600; color: #e2e8f0;">Click to Select Multiple Files</div>
+                                    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">Supports PDF, JPEG, PNG (Max 5MB each)</div>
+                                </div>
+                                <div id="summ-file-name" style="margin-top: 10px; font-size: 0.9rem; color: #6366f1; font-weight: 600; text-align: center;"></div>
+
+                                <div style="display: flex; align-items: center; margin: 20px 0; color: #64748b; font-size: 0.8rem; font-weight: 700;">
+                                    <div style="flex: 1; height: 1px; background: #334155;"></div>
+                                    <div style="margin: 0 10px;">OR PASTE TEXT</div>
+                                    <div style="flex: 1; height: 1px; background: #334155;"></div>
+                                </div>
+
+                                <textarea id="summ-text" placeholder="Paste your raw notes or paragraph here..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #334155; color: white; padding: 12px; border-radius: 12px; min-height: 100px; font-family: 'Outfit', sans-serif; resize: vertical;"></textarea>
+
+                                <button id="summ-btn" class="btn" onclick="summarizeNote()" style="width: 100%; margin-top: 20px; background: white; color: #0f172a; padding: 14px; border-radius: 12px; font-weight: 700;">
+                                    Generate Summary ⚡
+                                </button>
+
+                                <div id="summ-loading" style="display: none; text-align: center; padding: 20px; color: #cbd5e1;">
+                                    <div class="spinner" style="margin: 0 auto 10px; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                    Reading your notes... This might take a moment.
+                                </div>
+
+                                <div id="summ-result" style="display: none; margin-top: 25px; padding-top: 25px; border-top: 1px solid #334155;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                        <h3 style="margin: 0; font-size: 1.1rem; color: #e2e8f0;">Summary</h3>
+                                        <button onclick="copySummary()" style="background: none; border: 1px solid #475569; color: #cbd5e1; font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;">Copy</button>
+                                    </div>
+                                    <div id="summ-content" style="font-size: 0.95rem; line-height: 1.6; color: #cbd5e1; white-space: pre-wrap; font-family: 'Outfit', sans-serif;"></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Discover Tribes -->
                         <div style="margin-top: 40px;">
                             <div class="section-title">Discover Tribes</div>
@@ -1139,6 +1189,138 @@ $discover_groups = $discover_stmt->fetchAll();
                 fb.innerHTML = '';
             }
         });
+    }
+</script>
+<script>
+    // Summarizer Logic
+    const dropZone = document.getElementById('summ-drop-zone');
+    const fileInput = document.getElementById('summ-file');
+    const fileNameDisplay = document.getElementById('summ-file-name');
+    const summBtn = document.getElementById('summ-btn');
+
+    if (dropZone) {
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#6366f1';
+            dropZone.style.background = 'rgba(99, 102, 241, 0.1)';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#475569';
+            dropZone.style.background = 'transparent';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#475569';
+            dropZone.style.background = 'transparent';
+            
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        });
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) {
+                const count = fileInput.files.length;
+                if (count === 1) {
+                    fileNameDisplay.textContent = "Selected: " + fileInput.files[0].name;
+                } else {
+                    fileNameDisplay.textContent = "Selected: " + count + " files";
+                }
+                
+                document.getElementById('summ-text').value = ''; // Clear text if file selected
+                document.getElementById('summ-text').disabled = true;
+                dropZone.style.borderColor = '#6366f1';
+                dropZone.style.background = 'rgba(99, 102, 241, 0.1)';
+            }
+        }
+
+        // Re-enable text if file is cleared (conceptually, though currently no clear button, this is fine for now)
+        // Let's allow switching back by typing
+        const txtArea = document.getElementById('summ-text');
+        txtArea.addEventListener('input', () => {
+             if(txtArea.value.length > 0) {
+                 fileInput.value = ''; // Clear file
+                 fileNameDisplay.textContent = '';
+                 txtArea.disabled = false;
+                 dropZone.style.icon = '';
+                 dropZone.style.borderColor = '#475569';
+                 dropZone.style.background = 'transparent';
+             }
+        });
+
+        window.summarizeNote = function() {
+            const hasFile = fileInput.files.length > 0;
+            const hasText = txtArea.value.trim().length > 0;
+
+            if (!hasFile && !hasText) {
+                alert("Please upload a file OR paste some text first!");
+                return;
+            }
+
+            const formData = new FormData();
+            if (hasFile) {
+                 // Append all files as array
+                 for(let i=0; i<fileInput.files.length; i++){
+                     formData.append('note_files[]', fileInput.files[i]);
+                 }
+            } else {
+                 formData.append('note_text', txtArea.value.trim());
+            }
+
+            document.getElementById('summ-loading').style.display = 'block';
+            document.getElementById('summ-result').style.display = 'none';
+            summBtn.disabled = true;
+            summBtn.style.opacity = '0.7';
+
+            fetch('api/summarize_note.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('summ-loading').style.display = 'none';
+                summBtn.disabled = false;
+                summBtn.style.opacity = '1';
+
+                if (data.success) {
+                    document.getElementById('summ-result').style.display = 'block';
+                    document.getElementById('summ-content').textContent = data.summary;
+                    // Re-enable inputs
+                    txtArea.disabled = false;
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                document.getElementById('summ-loading').style.display = 'none';
+                summBtn.disabled = false;
+                txtArea.disabled = false;
+                alert('Something went wrong. Please try again.');
+                console.error(error);
+            });
+        }
+
+        window.copySummary = function() {
+            const text = document.getElementById('summ-content').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Add spinner Keyframes if not exists
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        `;
+        document.head.appendChild(styleSheet);
     }
 </script>
 </body>

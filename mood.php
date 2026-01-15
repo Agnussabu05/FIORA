@@ -13,11 +13,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $note = $_POST['note'];
     $date = date('Y-m-d');
 
+    $sleep = isset($_POST['sleep_hours']) ? (float)$_POST['sleep_hours'] : 0;
+    $activities = isset($_POST['activities']) ? json_encode($_POST['activities']) : null;
+
     // Insert or Update today's mood
-    $stmt = $pdo->prepare("INSERT INTO mood_logs (user_id, mood_score, mood_label, note, log_date) 
-                            VALUES (?, ?, ?, ?, ?) 
-                            ON DUPLICATE KEY UPDATE mood_score = VALUES(mood_score), mood_label = VALUES(mood_label), note = VALUES(note)");
-    $stmt->execute([$user_id, $score, $label, $note, $date]);
+    $stmt = $pdo->prepare("INSERT INTO mood_logs (user_id, mood_score, mood_label, note, log_date, sleep_hours, activities) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?) 
+                            ON DUPLICATE KEY UPDATE 
+                                mood_score = VALUES(mood_score), 
+                                mood_label = VALUES(mood_label), 
+                                note = VALUES(note),
+                                sleep_hours = VALUES(sleep_hours),
+                                activities = VALUES(activities)");
+    $stmt->execute([$user_id, $score, $label, $note, $date, $sleep, $activities]);
     header("Location: mood.php");
     exit;
 }
@@ -138,6 +146,37 @@ $recentLogs = $stmt->fetchAll();
                                 <div class="mood-btn" onclick="selectMood(5, 'Incredible', this)">🚀<span style="color: #222 !important;">Great</span></div>
                             </div>
                             
+                            <!-- New Detailed Inputs -->
+                            <div style="margin-top: 20px;">
+                                <label style="font-weight: 700; color: #111; margin-bottom: 8px; display: block;">Sleep Last Night: <span id="sleepVal" style="color: #6366f1;">7h</span></label>
+                                <input type="range" name="sleep_hours" min="0" max="12" value="7" step="0.5" style="width: 100%; accent-color: #6366f1;" oninput="document.getElementById('sleepVal').textContent = this.value + 'h'">
+                            </div>
+
+                            <div style="margin-top: 20px;">
+                                <label style="font-weight: 700; color: #111; margin-bottom: 8px; display: block;">What impacted your mood?</label>
+                                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Work"><span>💼 Work</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Study"><span>📚 Study</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Social"><span>👥 Social</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Exercise"><span>💪 Exercise</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Sleep"><span>😴 Sleep</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Health"><span>⚕️ Health</span></label>
+                                    <label class="tag-checkbox"><input type="checkbox" name="activities[]" value="Hobbies"><span>🎨 Hobby</span></label>
+                                </div>
+                                <style>
+                                    .tag-checkbox input { display: none; }
+                                    .tag-checkbox span {
+                                        display: inline-block; padding: 8px 12px; border-radius: 20px;
+                                        background: rgba(255,255,255,0.5); border: 1px solid #ccc;
+                                        cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #444;
+                                        transition: all 0.2s;
+                                    }
+                                    .tag-checkbox input:checked + span {
+                                        background: #6366f1; color: white; border-color: #6366f1;
+                                    }
+                                </style>
+                            </div>
+
                             <div class="form-group" style="margin-top: 20px;">
                                 <label style="font-weight: 700; color: #111; margin-bottom: 8px; display: block;">What's on your mind? (Optional)</label>
                                 <textarea name="note" class="form-input" rows="3" placeholder="I had a productive day..." style="color: #000; font-weight: 500;"></textarea>
@@ -185,10 +224,93 @@ $recentLogs = $stmt->fetchAll();
                     </div>
                     
                     <div style="margin-top: 40px; border-top: 2px solid var(--glass-border); padding-top: 30px;">
-                        <h4 style="color: #000 !important; font-weight: 800;">Today's Reflection</h4>
-                        <div style="background: rgba(255,255,255,0.4); padding: 20px; border-radius: 12px; margin-top: 15px; line-height: 1.6; color: #000; font-weight: 600; border: 1px solid var(--glass-border);">
-                            Recognizing patterns in your mood is the first step toward better mental clarity. Keep tracking to see your growth!
+                        <h4 style="color: #000 !important; font-weight: 800; margin-bottom: 20px;">Monthly Report 📅</h4>
+                        
+                        <?php
+                        $month = isset($_GET['m']) ? (int)$_GET['m'] : (int)date('m');
+                        $year = isset($_GET['y']) ? (int)$_GET['y'] : (int)date('Y');
+                        
+                        // Navigation Links
+                        $prevM = $month - 1; $prevY = $year;
+                        if ($prevM < 1) { $prevM = 12; $prevY--; }
+                        $nextM = $month + 1; $nextY = $year;
+                        if ($nextM > 12) { $nextM = 1; $nextY++; }
+                        
+                        // Fetch logs for this month
+                        $stmt = $pdo->prepare("SELECT log_date, mood_score, mood_label FROM mood_logs WHERE user_id = ? AND MONTH(log_date) = ? AND YEAR(log_date) = ?");
+                        $stmt->execute([$user_id, $month, $year]);
+                        $monthLogs = [];
+                        foreach ($stmt->fetchAll() as $row) {
+                            $monthLogs[$row['log_date']] = $row;
+                        }
+                        
+                        // Calendar Vars
+                        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+                        $firstDayOfWeek = date('w', strtotime("$year-$month-01")); // 0 (Sun) - 6 (Sat)
+                        ?>
+
+                        <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <a href="?m=<?php echo $prevM; ?>&y=<?php echo $prevY; ?>" class="btn-sm" style="background:#ddd; padding:5px 10px; border-radius:8px; text-decoration:none;">←</a>
+                            <span style="font-weight: 700; color: #333;"><?php echo date('F Y', mktime(0, 0, 0, $month, 1, $year)); ?></span>
+                            <a href="?m=<?php echo $nextM; ?>&y=<?php echo $nextY; ?>" class="btn-sm" style="background:#ddd; padding:5px 10px; border-radius:8px; text-decoration:none;">→</a>
                         </div>
+
+                        <div class="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center;">
+                            <!-- Weekdays -->
+                            <div class="cal-head">Sun</div><div class="cal-head">Mon</div><div class="cal-head">Tue</div>
+                            <div class="cal-head">Wed</div><div class="cal-head">Thu</div><div class="cal-head">Fri</div><div class="cal-head">Sat</div>
+                            
+                            <?php
+                            // Empty cells for days before the 1st
+                            for ($i = 0; $i < $firstDayOfWeek; $i++) {
+                                echo "<div></div>";
+                            }
+                            
+                            // Days
+                            for ($day = 1; $day <= $daysInMonth; $day++) {
+                                $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $day);
+                                $hasLog = isset($monthLogs[$dateStr]);
+                                
+                                $bg = 'rgba(255,255,255,0.3)';
+                                $emoji = '';
+                                if ($hasLog) {
+                                    $score = $monthLogs[$dateStr]['mood_score'];
+                                    $colors = ['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#a855f7'];
+                                    $emojis = ['', '😫', '😔', '😐', '😊', '🚀'];
+                                    $bg = $colors[$score] . '40'; // low opacity
+                                    $emoji = $emojis[$score];
+                                }
+                                
+                                echo "<div style='background: $bg; border-radius: 8px; padding: 10px 2px; font-size: 0.8rem; color: #444; min-height: 50px;'>
+                                        <div style='font-weight:700;'>$day</div>
+                                        <div style='font-size:1rem; margin-top:2px;'>$emoji</div>
+                                      </div>";
+                            }
+                            ?>
+                        </div>
+                        <style>
+                            .cal-head { font-size: 0.7rem; color: #888; font-weight: 600; padding-bottom: 5px; }
+                        </style>
+                    </div>
+                </div>
+
+                <!-- Mood Companion Chat -->
+                <div class="glass-card" style="padding: 30px; margin-top: 30px; border-top: 4px solid #8b5cf6;">
+                    <h3 style="margin-bottom: 10px; color: #000 !important; display: flex; align-items: center; gap: 10px;">
+                        <span>🟣</span> Mood Companion
+                    </h3>
+                    <p style="color: #444; font-size: 0.9rem;">Vent, reflect, or just chat. Based on your current vibe.</p>
+                    
+                    <div id="chat-box" style="height: 300px; overflow-y: auto; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 15px; margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+                        <!-- Messages will appear here -->
+                        <div style="align-self: flex-start; background: white; padding: 10px 15px; border-radius: 15px 15px 15px 0; max-width: 80%; box-shadow: 0 2px 5px rgba(0,0,0,0.05); font-size: 0.9rem; color: #333;">
+                            Hi <?php echo htmlspecialchars($username); ?>! I'm here to listen. How are you feeling right now?
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding: 12px; border-radius: 12px; border: 1px solid #ccc; outline: none;">
+                        <button onclick="sendMessage()" id="chat-send-btn" style="background: #8b5cf6; color: white; border: none; padding: 0 20px; border-radius: 12px; font-weight: 700; cursor: pointer;">→</button>
                     </div>
                 </div>
             </div>
@@ -243,6 +365,94 @@ $recentLogs = $stmt->fetchAll();
                 }
             }
         });
+    </script>
+    <script>
+        // Chatbot Logic
+        const chatBox = document.getElementById('chat-box');
+        const chatInput = document.getElementById('chat-input');
+        const chatBtn = document.getElementById('chat-send-btn');
+        
+        // Get latest mood context from PHP
+        const currentMoodLabel = "<?php echo !empty($recentLogs) ? $recentLogs[0]['mood_label'] : 'Neutral'; ?>";
+        
+        chatInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            // Add User Message
+            addMessage(text, 'user');
+            chatInput.value = '';
+            chatInput.disabled = true;
+            
+            // Show Typing Indicator
+            const typingId = addMessage('Thinking...', 'bot', true);
+
+            // Send to Backend
+            fetch('api/chat_mood.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: text,
+                    mood_context: currentMoodLabel
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                // Remove Typing Indicator
+                const typingEl = document.getElementById(typingId);
+                if(typingEl) typingEl.remove();
+
+                if (data.success) {
+                    addMessage(data.reply, 'bot');
+                } else {
+                    addMessage("Error: " + (data.error || "Unknown error"), 'bot');
+                }
+                chatInput.disabled = false;
+                chatInput.focus();
+            })
+            .catch(err => {
+                console.error(err);
+                chatInput.disabled = false;
+            });
+        }
+
+        function addMessage(text, sender, isTyping = false) {
+            const div = document.createElement('div');
+            div.style.maxWidth = '80%';
+            div.style.padding = '10px 15px';
+            div.style.fontSize = '0.9rem';
+            div.style.marginBottom = '5px';
+            div.style.lineHeight = '1.5';
+            
+            if (sender === 'user') {
+                div.style.alignSelf = 'flex-end';
+                div.style.background = '#8b5cf6';
+                div.style.color = 'white';
+                div.style.borderRadius = '15px 15px 0 15px';
+            } else {
+                div.style.alignSelf = 'flex-start';
+                div.style.background = 'white';
+                div.style.color = '#333';
+                div.style.borderRadius = '15px 15px 15px 0';
+                div.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
+            }
+
+            if (isTyping) {
+                div.id = 'typing-' + Date.now();
+                div.style.fontStyle = 'italic';
+                div.style.color = '#888';
+            }
+
+            div.textContent = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            return div.id;
+        }
     </script>
 </body>
 </html>

@@ -64,6 +64,8 @@ $statsStmt = $pdo->prepare("SELECT
     FROM books WHERE user_id = ?");
 $statsStmt->execute([$user_id]);
 $stats = $statsStmt->fetch();
+
+$is_embedded = isset($_GET['embedded']) && $_GET['embedded'] == 'true';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -74,6 +76,7 @@ $stats = $statsStmt->fetch();
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
+        /* ... (existing styles) ... */
         .reading-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -161,11 +164,17 @@ $stats = $statsStmt->fetch();
         .book-title { font-size: 1.25rem; font-weight: 800; color: #000 !important; line-height: 1.3; }
         .book-author { font-size: 0.95rem; color: #222; font-weight: 600; }
         .page-counter { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; color: #000; font-weight: 700; }
+        /* Override for embedded view */
+        <?php if ($is_embedded): ?>
+        body { background: transparent; }
+        .main-content { margin-left: 0 !important; width: 100% !important; padding: 10px !important; }
+        .app-container { display: block; }
+        <?php endif; ?>
     </style>
 </head>
 <body>
     <div class="app-container">
-        <?php include 'includes/sidebar.php'; ?>
+        <?php if (!$is_embedded) include 'includes/sidebar.php'; ?>
         
         <main class="main-content">
             <header class="header">
