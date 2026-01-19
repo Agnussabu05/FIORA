@@ -14,3 +14,6 @@ Please retry in 32.676339757s.
 [2026-01-16 08:40:52] HF Error: https://api-inference.huggingface.co is no longer supported. Please use https://router.huggingface.co instead.
 [2026-01-16 08:45:23] HF Error: https://api-inference.huggingface.co is no longer supported. Please use https://router.huggingface.co instead.
 [2026-01-18 14:46:26] HF Error: https://api-inference.huggingface.co is no longer supported. Please use https://router.huggingface.co instead.
+[2026-01-19 16:20:20] HF Error: https://api-inference.huggingface.co is no longer supported. Please use https://router.huggingface.co instead.
+[2026-01-19 16:53:03] AI Error: https://api-inference.huggingface.co is no longer supported. Please use https://router.huggingface.co instead.
+[2026-01-19 16:55:51] Unexpected response format. Please try again.

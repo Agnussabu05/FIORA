@@ -1,0 +1,368 @@
+<?php
+// api/chat_mood.php - ADVANCED Version
+header('Content-Type: application/json');
+session_start();
+
+function sendError($message) {
+    echo json_encode(['success' => false, 'error' => $message]);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    sendError('Invalid request method.');
+}
+
+$input = json_decode(file_get_contents('php://input'), true);
+$message = trim($input['message'] ?? '');
+$moodContext = $input['mood_context'] ?? 'Neutral';
+
+if (empty($message)) {
+    sendError('Message cannot be empty.');
+}
+
+// Initialize conversation history
+if (!isset($_SESSION['chat_history'])) {
+    $_SESSION['chat_history'] = [];
+}
+
+// Helper to pick random response
+function randomPick($array) {
+    return $array[array_rand($array)];
+}
+
+// ADVANCED: Sentiment Intensity Analysis
+function analyzeSentiment($message) {
+    $messageLower = strtolower($message);
+    $intensity = 1; // 1 = low, 2 = medium, 3 = high
+    
+    // High intensity indicators
+    $highIntensity = ['very', 'extremely', 'really', 'so much', 'completely', 'totally', 'absolutely', '!!!', 'desperately', 'urgently'];
+    foreach ($highIntensity as $word) {
+        if (strpos($messageLower, $word) !== false) {
+            $intensity = 3;
+            break;
+        }
+    }
+    
+    // Medium intensity
+    if ($intensity < 3) {
+        $mediumIntensity = ['quite', 'pretty', 'fairly', 'somewhat', 'kind of', 'kinda', '!!'];
+        foreach ($mediumIntensity as $word) {
+            if (strpos($messageLower, $word) !== false) {
+                $intensity = 2;
+                break;
+            }
+        }
+    }
+    
+    // Crisis detection
+    $crisisWords = ['suicidal', 'kill myself', 'end it all', 'no point', 'give up', 'can\'t go on'];
+    $isCrisis = false;
+    foreach ($crisisWords as $word) {
+        if (strpos($messageLower, $word) !== false) {
+            $isCrisis = true;
+            break;
+        }
+    }
+    
+    return ['intensity' => $intensity, 'crisis' => $isCrisis];
+}
+
+// ADVANCED: Negation Detection
+function hasNegation($message) {
+    $negations = ['not', 'no', 'never', 'don\'t', 'doesn\'t', 'didn\'t', 'won\'t', 'can\'t', 'isn\'t', 'aren\'t'];
+    $messageLower = strtolower($message);
+    
+    foreach ($negations as $neg) {
+        if (preg_match('/\b' . $neg . '\b/', $messageLower)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ADVANCED: Detect Multiple Emotions
+function detectEmotions($message) {
+    $emotions = [];
+    $messageLower = strtolower($message);
+    
+    if (preg_match('/(stress|anxious|overwhelm|worry|pressure|nervous|panic|tense)/', $messageLower)) {
+        $emotions[] = 'stress';
+    }
+    if (preg_match('/(sad|depressed|down|low|lonely|empty|hopeless|hurt|cry)/', $messageLower)) {
+        $emotions[] = 'sadness';
+    }
+    if (preg_match('/(angry|mad|furious|frustrated|annoyed|irritated)/', $messageLower)) {
+        $emotions[] = 'anger';
+    }
+    if (preg_match('/(tired|exhausted|sleep|insomnia|fatigue)/', $messageLower)) {
+        $emotions[] = 'fatigue';
+    }
+    if (preg_match('/(happy|great|awesome|amazing|wonderful|excited|joyful)/', $messageLower)) {
+        $emotions[] = 'happiness';
+    }
+    
+    return $emotions;
+}
+
+// ADVANCED: Time-aware responses
+function getTimeOfDay() {
+    $hour = date('H');
+    if ($hour >= 5 && $hour < 12) return 'morning';
+    if ($hour >= 12 && $hour < 17) return 'afternoon';
+    if ($hour >= 17 && $hour < 21) return 'evening';
+    return 'night';
+}
+
+// ADVANCED CHATBOT with context, sentiment, and intelligence
+function generateResponse($message, $mood, $history) {
+    $messageLower = strtolower($message);
+    $wordCount = str_word_count($message);
+    $sentiment = analyzeSentiment($message);
+    $hasNeg = hasNegation($message);
+    $emotions = detectEmotions($message);
+    $timeOfDay = getTimeOfDay();
+    
+    // CRISIS INTERVENTION
+    if ($sentiment['crisis']) {
+        $crisisResponses = [
+            "I'm really concerned about what you're sharing. Please reach out to a mental health professional or crisis helpline immediately. You matter, and there are people who want to help. 🆘",
+            "What you're feeling sounds serious. Please contact a crisis helpline right away - they're available 24/7. Your life has value. National Suicide Prevention Lifeline: 988 🆘",
+            "I hear your pain, but I'm not equipped for crisis support. Please call a mental health crisis line now. You deserve professional help. You're not alone. 🆘"
+        ];
+        return randomPick($crisisResponses);
+    }
+    
+    // NEGATION HANDLING - "I'm NOT stressed"
+    if ($hasNeg && count($emotions) > 0) {
+        $positiveResponses = [
+            "That's good to hear! Sometimes it helps to confirm what we're NOT feeling. So what ARE you feeling right now? 💭",
+            "I'm glad that's not the case! Want to share what's actually on your mind? I'm listening. ✨",
+            "Noted! It's helpful to rule things out. What would be a better word for how you're feeling? 🌟"
+        ];
+        return randomPick($positiveResponses);
+    }
+    
+    // MULTIPLE EMOTIONS - Handle complexity
+    if (count($emotions) >= 2) {
+        $multiEmotionResponses = [
+            "I can tell there's a lot going on - you're experiencing multiple emotions at once. That's completely normal. What's the strongest feeling right now? 💙",
+            "It sounds like you're dealing with several things simultaneously. Let's unpack this: which emotion is most intense for you? 🎯",
+            "Mixed feelings are tough to navigate. You don't have to have it all figured out. What's the one thing weighing heaviest? 💭"
+        ];
+        return randomPick($multiEmotionResponses);
+    }
+    
+    // TIME-AWARE GREETINGS
+    if (preg_match('/^(hi|hello|hey|hola|sup|greetings|good morning|good evening)/', $messageLower)) {
+        $timeGreetings = [
+            'morning' => [
+                'Stressed' => "Good morning! I can sense the day started heavy. Let's take it one step at a time. Coffee first? ☕💙",
+                'Sad' => "Morning! Rough start to the day? I'm here. Sometimes mornings are the hardest. You're not alone. 🌅",
+                'Neutral' => "Good morning! How's the day shaping up so far? I'm here to chat. ☀️",
+                'Good' => "Morning! Love the positive energy to start the day! What's making this morning great? 🌟",
+                'Incredible' => "Good morning superstar! Starting the day on fire! What's fueling this amazing energy? 🚀"
+            ],
+            'night' => [
+                'Stressed' => "Hey there! Late night worries? Let's work through what's keeping you up. You need rest. 🌙",
+                'Sad' => "Hi friend. Nighttime can amplify everything. You're not alone in this. Want to talk? 💙",
+                'Neutral' => "Hello! Late night thoughts? I'm here to listen whenever you need. 🌟",
+                'Good' => "Hey! Nice to hear from you this evening! What's keeping you in good spirits? ✨",
+                'Incredible' => "Hello night owl! Love the energy even at this hour! What's got you buzzing? 🌙✨"
+            ]
+        ];
+        
+        $greetingSet = $timeGreetings[$timeOfDay] ?? $timeGreetings['evening'];
+        return $greetingSet[$mood] ?? randomPick($greetingSet);
+    }
+    
+    // INTENSITY-BASED RESPONSES
+    $intensityModifier = $sentiment['intensity'];
+    
+    // STRESS/ANXIETY - with intensity levels
+    if (preg_match('/(stress|anxious|overwhelm|worry|worried|pressure|nervous|panic|tense)/', $messageLower)) {
+        $responses = [
+            1 => [ // Low intensity
+                "I hear you - a bit of stress is normal. Try the 5-4-3-2-1 grounding: name 5 things you see, 4 you can touch, 3 you hear, 2 you smell, 1 you taste. 🌿",
+                "Stress happens! Quick reset: take 3 deep breaths. Then ask: what can wait until tomorrow? 💙"
+            ],
+            2 => [ // Medium intensity
+                "That sounds quite overwhelming. Break it down: what's the ONE most urgent thing? Tackle that first. Everything else can wait. 🎯",
+                "Stress piling up, I get it. Try this: make a brain dump - write EVERYTHING down. Then prioritize just the top 3. 📝"
+            ],
+            3 => [ // High intensity
+                "That sounds REALLY intense. You need immediate relief: take 5 slow breaths (4 count in, 6 count out). Then step away for 10 minutes - walk, water, anything. 🚨",
+                "This is a LOT. Emergency protocol: 1) Breathe deeply for 60 seconds. 2) Identify what MUST happen today vs what you THINK must. 3) Ask for help if possible. 💪"
+            ]
+        ];
+        return randomPick($responses[$intensityModifier] ?? $responses[2]);
+    }
+    
+    // SADNESS - with intensity
+    if (preg_match('/(sad|depressed|down|low|lonely|empty|hopeless|hurt|cry|crying|upset)/', $messageLower)) {
+        $responses = [
+            1 => [
+                "Feeling a bit low is okay. What's one tiny thing that might bring 1% more comfort? Even just a favorite song or warm drink. 🌸",
+                "I hear you. On low days: be extra kind to yourself. Lower the bar - today, just existing is enough. 💙"
+            ],
+            2 => [
+                "That sounds really painful. You don't have to 'fix' yourself right now. Just let yourself feel it. Tomorrow might be lighter. 🌈",
+                "I'm sorry you're going through this. Small steps: have you eaten? Had water? Talked to anyone? Start there. 💜"
+            ],
+            3 => [
+                "This sounds extremely heavy. Please consider reaching out to someone you trust or a counselor. You don't have to carry this alone. Your feelings matter. 🆘",
+                "That's a lot of pain. If you haven't already, please talk to a mental health professional. In the meantime: you're here, you're trying, and that's brave. 💙"
+            ]
+        ];
+        return randomPick($responses[$intensityModifier] ?? $responses[2]);
+    }
+    
+    // ANGER - new category!
+    if (preg_match('/(angry|mad|furious|frustrated|annoyed|irritated|pissed)/', $messageLower)) {
+        $responses = [
+            "Anger is valid! Before reacting: take 10 deep breaths, go for a quick walk, or punch a pillow. Then decide your next move with a clear head. 🔥",
+            "I hear the frustration. Anger often masks hurt or fear. Once you cool down, ask yourself: what's the real need here? 💭",
+            "That sounds infuriating! Channel it productively: exercise, journal, or express it to someone safe. Don't bottle it up. 💪",
+            "Frustration is real. Quick anger release: clench your fists for 10 seconds, then release. Repeat 3x. Then assess: what's in your control? 🎯"
+        ];
+        return randomPick($responses);
+    }
+    
+    // SLEEP - enhanced
+    if (preg_match('/(tired|exhausted|sleep|insomnia|sleepy|fatigue|can\'t sleep|awake)/', $messageLower)) {
+        if ($timeOfDay == 'night' || $timeOfDay == 'morning') {
+            $responses = [
+                "Can't sleep? Try this: 4-7-8 breathing (in-4, hold-7, out-8, repeat 4x). No screens. Cool, dark room. If still awake after 20 min, get up and read. 📚",
+                "Insomnia is frustrating! Tonight: write down tomorrow's worries, then tell yourself you'll deal with them THEN. Your only job now is rest. 😴",
+                "Sleep hygiene: dim lights 1hr before bed, cool room (65-68°F), no screens 30min before. If mind races: progressive muscle relaxation. 🌙"
+            ];
+        } else {
+            $responses = [
+                "Exhausted? Power nap: 20 minutes max. Set an alarm. Dark room. You'll wake refreshed, not groggy. ⚡",
+                "Fatigue makes everything harder. Hydrate, eat something with protein, and if you can - rest. Even 15 minutes helps. 💤"
+            ];
+        }
+        return randomPick($responses);
+    }
+    
+    // WORK/STUDY - enhanced with Eisenhower Matrix
+    if (preg_match('/(work|job|exam|test|deadline|assignment|study|project|boss|manager|professor)/', $messageLower)) {
+        $responses = [
+            "Deadline stress? Eisenhower Matrix: Urgent+Important (do now), Important+Not Urgent (schedule), Urgent+Not Important (delegate), Neither (drop). 🎯",
+            "Study overwhelm? Pomodoro: 25min focus, 5min break. After 4 rounds, take 15-30min break. Quality beats quantity. 📚",
+            "Work piling up? Time blocking: assign specific hours to specific tasks. Defend those blocks like meetings. Productivity = focus, not hours. ⏰",
+            "Exam anxiety? Active recall: close the book, write what you remember. Test yourself. This beats re-reading 10x over. 💡"
+        ];
+        return randomPick($responses);
+    }
+    
+    // RELATIONSHIPS
+    if (preg_match('/(friend|relationship|family|alone|social|people|partner|boyfriend|girlfriend|conflict)/', $messageLower)) {
+        $responses = [
+            "Relationships are complex. Remember: you can love someone AND need distance. Your peace matters too. Setting boundaries is self-care, not selfishness. 💕",
+            "People stuff is hard! Ask yourself: is this relationship adding to my life or draining it? You're allowed to step back. 🌿",
+            "Feeling alone? Loneliness vs solitude - one is painful, one is peaceful. Which are you experiencing? Sometimes we need to recharge solo. 💙",
+            "Conflict is normal. Before the conversation: know your boundaries, stay calm, use 'I' statements. 'I feel X when Y' beats 'You always Z'. 🗣️"
+        ];
+        return randomPick($responses);
+    }
+    
+    // POSITIVE - amplify!
+    if (preg_match('/(happy|great|awesome|amazing|wonderful|fantastic|excellent|better|excited|pumped|good day)/', $messageLower)) {
+        $responses = [
+            "YES! Savor this! Positive psychology tip: write down 3 specific things that made today great. This trains your brain to notice more good. 🌟",
+            "Love this energy! What created it? Identify the pattern - more of THAT. Happiness is a skill you're building! ✨",
+            "Amazing! Share it with someone - positive emotions multiply when expressed. Who should hear about your good day? 🎉",
+            "That's wonderful! Anchor this feeling: close your eyes for 10 seconds and really FEEL the goodness. Come back to this mental snapshot later. 🌈"
+        ];
+        return randomPick($responses);
+    }
+    
+    // GRATITUDE
+    if (preg_match('/(thank|thanks|grateful|appreciate)/', $messageLower)) {
+        $responses = [
+            "You're welcome! Pro tip: keep a gratitude journal. 3 things daily. It literally rewires your brain for optimism. Science-backed! 📝✨",
+            "My pleasure! The fact you expressed gratitude shows emotional intelligence. Keep that up - it's a happiness superpower. 💜",
+            "Anytime! Gratitude practice: tonight before bed, think of 3 good moments today. Make it a habit. Watch your mood shift! 🌟"
+        ];
+        return randomPick($responses);
+    }
+    
+    // QUESTIONS ABOUT CHATBOT
+    if (preg_match('/(how are you|what.*you doing|who are you|tell me about yourself)/', $messageLower)) {
+        $responses = [
+            "I'm Fiora - think of me as that friend who always has time to listen, never judges, and actually WANTS to hear about your day. 😊 How are YOU?",
+            "I'm your 24/7 wellness companion! No judgment, no rushed conversations. Just support. More importantly - what's on your mind? 💜",
+            "I'm here to help you process emotions and find clarity. But enough about me - you came here for a reason. What's going on? 💭"
+        ];
+        return randomPick($responses);
+    }
+    
+    // HELP/ADVICE
+    if (preg_match('/(help|advice|what should i|don\'t know|confused|lost|stuck)/', $messageLower)) {
+        $responses = [
+            "Let's figure this out together. First: what are your options? List them all, even the 'bad' ones. Sometimes seeing them clarifies things. 🤔",
+            "Feeling stuck? Try this: if you had a magic wand and could do ANYTHING, what would you do? Now, what's the smallest step toward that? 💭",
+            "I'll help best I can! What's the decision about - life direction, relationships, work, self-care? Let's narrow it down. 🎯"
+        ];
+        return randomPick($responses);
+    }
+    
+    // SHORT MESSAGES (1-3 words)
+    if ($wordCount <= 3) {
+        $shortResponses = [
+            "I'm listening. What's behind that feeling? Tell me more. 💙",
+            "Mhm, I hear you. Want to expand on that? I've got time. 💭",
+            "I'm with you. What else is going on? 🌟",
+            "Go on... sometimes the hardest part is starting. I'm here. ✨"
+        ];
+        return randomPick($shortResponses);
+    }
+    
+    // MOOD-BASED DEFAULTS with context awareness
+    $moodResponses = [
+        'Stressed' => [
+            "There's a lot on your mind, I can tell. Remember: you don't need all the answers right now. Just the next step. What's ONE thing you can control? 💙",
+            "That sounds challenging. Stress hack: if everything feels urgent, NOTHING is urgent. Real priority test: what would break if you didn't do it today? Start there. 🎯"
+        ],
+        'Sad' => [
+            "I hear you. Low moments are part of being human. They don't last forever, even when they feel like it. What's one gentle thing you can do for yourself today? 🌸",
+            "That must feel heavy. Healing isn't linear - some days are just survival days. And that's okay. Be as kind to yourself as you'd be to a friend. 💜"
+        ],
+        'Neutral' => [
+            "Thanks for sharing. Sometimes just expressing thoughts helps organize them. What's the main thing on your mind right now? 💭",
+            "I appreciate you opening up. Want to talk through anything specific, or just thinking out loud? Either works! 💙"
+        ],
+        'Good' => [
+            "Love hearing this! Build on this momentum. What specifically is making today good? Let's identify the pattern so you can create more of it! ✨",
+            "That's great! Good moments deserve celebration. What are you most proud of or grateful for right now? 🌟"
+        ],
+        'Incredible' => [
+            "Your energy is contagious! Don't just enjoy it - analyze it: what created this feeling? Bottle that recipe! 🚀",
+            "Amazing vibes! Share the secret: what's making life incredible right now? Others could learn from this! 🎉"
+        ]
+    ];
+    
+    return randomPick($moodResponses[$mood] ?? $moodResponses['Neutral']);
+}
+
+// Store message in history
+$_SESSION['chat_history'][] = [
+    'message' => $message,
+    'mood' => $moodContext,
+    'timestamp' => time()
+];
+
+// Keep only last 5 messages
+if (count($_SESSION['chat_history']) > 5) {
+    $_SESSION['chat_history'] = array_slice($_SESSION['chat_history'], -5);
+}
+
+// Generate response
+$reply = generateResponse($message, $moodContext, $_SESSION['chat_history']);
+
+echo json_encode([
+    'success' => true,
+    'reply' => $reply
+]);
+?>

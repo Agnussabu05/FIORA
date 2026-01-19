@@ -14,6 +14,11 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="user_activity.php" class="nav-link <?php echo ($page == 'user_activity') ? 'active' : ''; ?>">
+                <span>⚡</span> User Activity
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="modules.php" class="nav-link <?php echo ($page == 'modules') ? 'active' : ''; ?>">
                 <span>🛠️</span> Modules
             </a>

@@ -107,6 +107,9 @@ $page = 'modules';
                         <?php if (strtolower($displayName) === 'reading' && $mod['setting_value'] == '1'): ?>
                             <a href="reading_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
                         <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'mood' && $mod['setting_value'] == '1'): ?>
+                            <a href="mood_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 </div>
