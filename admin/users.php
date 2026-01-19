@@ -34,6 +34,7 @@ if (isset($_POST['toggle_status_id'])) {
 $search = $_GET['search'] ?? '';
 $params = [];
 
+
 $query = "
     SELECT 
         u.id, 
@@ -44,10 +45,11 @@ $query = "
         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
     FROM users u
     LEFT JOIN tasks t ON u.id = t.user_id
+    WHERE u.username != 'demo'
 ";
 
 if ($search) {
-    $query .= " WHERE u.username LIKE ?";
+    $query .= " AND u.username LIKE ?";
     $params[] = "%$search%";
 }
 
@@ -147,15 +149,16 @@ $page = 'users';
                                     <div style="display: flex; gap: 10px; align-items: center;">
                                         <a href="user_details.php?id=<?php echo $user['id']; ?>" class="btn btn-primary" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem; border-radius: 8px;">View Details</a>
                                         
-                                        <form method="POST" style="display:inline;">
-                                            <input type="hidden" name="toggle_status_id" value="<?php echo $user['id']; ?>">
-                                            <button type="submit" class="btn-action" title="Deactivate">🚫</button>
-                                        </form>
                                         <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                                        <form method="POST" onsubmit="return confirm('Permanently delete this user?');" style="display:inline;">
-                                            <input type="hidden" name="delete_user_id" value="<?php echo $user['id']; ?>">
-                                            <button type="submit" class="btn-action" title="Delete">🗑️</button>
-                                        </form>
+                                            <form method="POST" style="display:inline;">
+                                                <input type="hidden" name="toggle_status_id" value="<?php echo $user['id']; ?>">
+                                                <button type="submit" class="btn-action" title="Deactivate">🚫</button>
+                                            </form>
+                                        
+                                            <form method="POST" onsubmit="return confirm('Permanently delete this user?');" style="display:inline;">
+                                                <input type="hidden" name="delete_user_id" value="<?php echo $user['id']; ?>">
+                                                <button type="submit" class="btn-action" title="Delete">🗑️</button>
+                                            </form>
                                         <?php endif; ?>
                                     </div>
                                 </td>

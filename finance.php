@@ -90,12 +90,12 @@ foreach ($trendRows as $row) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fiora - Premium Finance</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --success: #6B8C73;
-            --danger: #C06C6C;
+            --success: #10b981;
+            --danger: #ef4444;
             --chart-bg: rgba(255, 255, 255, 0.5);
         }
 
@@ -211,8 +211,8 @@ foreach ($trendRows as $row) {
         <main class="main-content">
             <header class="finance-header">
                 <div>
-                    <h1 style="color: #000 !important;">Financial Dashboard</h1>
-                    <p style="color: #222; font-weight: 700;">Balance: <strong>₹<?php echo number_format($balance, 2); ?></strong> in <?php echo $currentMonthName; ?></p>
+                    <h1 style="color: var(--primary);">Financial Dashboard</h1>
+                    <p style="color: var(--text-muted); font-weight: 600;">Balance: <strong>₹<?php echo number_format($balance, 2); ?></strong> in <?php echo $currentMonthName; ?></p>
                 </div>
                 <div style="display: flex; gap: 15px; align-items: center;">
                     <div class="month-selector">
@@ -221,7 +221,7 @@ foreach ($trendRows as $row) {
                         $nextMonth = $month + 1; $nextYear = $year; if ($nextMonth > 12) { $nextMonth = 1; $nextYear++; }
                         ?>
                         <a href="?month=<?php echo $prevMonth; ?>&year=<?php echo $prevYear; ?>" class="btn-nav">←</a>
-                        <span style="font-weight: 700; width: 120px; text-align: center;"><?php echo $currentMonthName; ?></span>
+                        <span style="font-weight: 700; width: 120px; text-align: center; color: var(--text-main);"><?php echo $currentMonthName; ?></span>
                         <a href="?month=<?php echo $nextMonth; ?>&year=<?php echo $nextYear; ?>" class="btn-nav">→</a>
                     </div>
                     <button class="btn btn-primary" onclick="openModal()">+ Add Transaction</button>
@@ -231,8 +231,8 @@ foreach ($trendRows as $row) {
             <div class="summary-grid">
                 <div class="summary-card">
                     <div style="display: flex; align-items: center; gap: 15px;">
-                        <div class="card-icon" style="background: rgba(107, 140, 115, 0.2); color: var(--success); font-weight: 900;">📈</div>
-                        <span style="font-weight: 800; color: #222;">Total Income</span>
+                        <div class="card-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success); font-weight: 900;">📈</div>
+                        <span style="font-weight: 800; color: var(--text-main);">Total Income</span>
                     </div>
                     <div class="amount-display type-income" style="font-size: 2.2rem; font-weight: 800;">₹<?php echo number_format($totalIncome, 2); ?></div>
                 </div>

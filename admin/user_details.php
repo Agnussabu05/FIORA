@@ -366,7 +366,7 @@ $page = 'users';
             data: {
                 labels: ['Income', 'Expense'],
                 datasets: [{
-                    label: 'Amount ($)',
+                    label: 'Amount (₹)',
                     data: [<?php echo $totalIncome; ?>, <?php echo $totalExpense; ?>],
                     backgroundColor: ['#10B981', '#EF4444'],
                     borderRadius: 6

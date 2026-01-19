@@ -1,20 +1,28 @@
 :root {
-    /* Color Palette - Earthy Clay */
-    --primary: #222222;
-    /* Sharp Black/Grey */
-    --primary-hover: #000000;
-    --secondary: #9E9080;
-    /* Deep Taupe */
-    --bg-dark: #E3DAC9;
-    /* Warm Beige */
-    --bg-gradient: linear-gradient(135deg, #E3DAC9 0%, #D6CDBF 100%);
-    --glass-bg: rgba(255, 255, 255, 0.5);
+    color-scheme: light;
+    /* Force light native controls */
+    /* Color Palette - Clean White & Blue (Matching Login Illustration) */
+    --primary: #0f3460;
+    /* Deep Navy */
+    --primary-hover: #16213e;
+    --secondary: #64748b;
+    /* Slate */
+
+    --bg-dark: #f8faff;
+    /* Cool White */
+    --bg-gradient: linear-gradient(135deg, #ffffff 0%, #dbeafe 100%);
+    /* Fresh Blue tint */
+
+    --glass-bg: rgba(255, 255, 255, 0.95);
     --glass-border: rgba(255, 255, 255, 0.8);
-    --text-main: #000000;
-    --text-muted: #333333;
-    --success: #6B8C73;
-    --warning: #D9A066;
-    --danger: #C06C6C;
+
+    --text-main: #1e293b;
+    /* Slate 800 */
+    --text-muted: #64748b;
+
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
 
     /* Spacing */
     --spacing-xs: 0.5rem;
@@ -27,19 +35,19 @@
     --radius-lg: 24px;
 
     /* Category Colors */
-    --cat-study: #6B8C73;
-    --cat-work: #8D8173;
-    --cat-personal: #A69B8F;
-    --cat-health: #7C9885;
-    --cat-finance: #C78D55;
-    --cat-other: #555555;
+    --cat-study: #3b82f6;
+    --cat-work: #8b5cf6;
+    --cat-personal: #14b8a6;
+    --cat-health: #ef4444;
+    --cat-finance: #f59e0b;
+    --cat-other: #64748b;
 }
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
 
 body {
@@ -425,3 +433,108 @@ select.btn-secondary {
 }
 
 /* End of File */
+
+/* --- Notifications (Migrated from index.php) --- */
+.notification-wrapper {
+    position: relative;
+    margin-right: 15px;
+}
+
+.notification-bell {
+    font-size: 1.5rem;
+    cursor: pointer;
+    position: relative;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notification-bell:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.notification-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.65rem;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.notification-dropdown {
+    position: absolute;
+    top: 50px;
+    right: 0;
+    width: 320px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+    display: none;
+    flex-direction: column;
+    z-index: 1001;
+    overflow: hidden;
+    animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.notification-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    font-weight: 700;
+    font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-main);
+}
+
+.notification-body {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    padding: 15px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    display: flex;
+    gap: 12px;
+    transition: background 0.2s;
+    cursor: default;
+}
+
+.notification-item:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.notification-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}

@@ -97,64 +97,82 @@ if (isset($db_connection_error)) {
             --text-muted: #6B7280;
         }
         
-        body {
-            /* Task Management / Productivity Theme Background */
-            background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
-                        url('https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?q=80&w=2572&auto=format&fit=crop');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            min-height: 100vh;
+        * {
+            box-sizing: border-box;
             margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); /* Fresh Blue Gradient */
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Inter', sans-serif;
-            color: var(--text-main);
         }
 
-        .brand-watermark {
-            position: absolute;
-            top: 40px;
-            left: 50px;
-            color: white;
-            font-weight: 800;
-            font-size: 1.5rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            opacity: 0.9;
-        }
-
-        .auth-container {
-            width: 100%;
-            max-width: 420px;
-            padding: 20px;
-        }
-
-        .auth-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            padding: 48px 40px;
-            box-shadow: 
-                0 4px 6px -1px rgba(0, 0, 0, 0.1), 
-                0 2px 4px -1px rgba(0, 0, 0, 0.06),
-                0 20px 25px -5px rgba(0, 0, 0, 0.1),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.2);
-            position: relative;
+        .login-wrapper {
+            width: 1000px;
+            max-width: 95%;
+            height: 650px;
+            background: #fff;
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
             overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
         }
-        
-        .auth-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 
-                0 20px 25px -5px rgba(0, 0, 0, 0.1), 
-                0 10px 10px -5px rgba(0, 0, 0, 0.04),
-                0 0 0 1px rgba(255,255,255,0.3);
+
+        /* Left Side - Image */
+        .left-panel {
+            flex: 1;
+            background: url('assets/images/login_illustration.png');
+            background-color: #eef2ff; /* Fallback/Blend color matching the illustration */
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px;
+            color: var(--primary);
+        }
+
+        .left-panel::after {
+            display: none;
+        }
+
+        .panel-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .panel-content h1 {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            font-weight: 600;
+            margin-bottom: 20px;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+
+        .panel-content p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            font-weight: 500;
+            max-width: 80%;
+            color: var(--text-muted);
+        }
+
+        /* Right Side - Form */
+        .right-panel {
+            flex: 1;
+            padding: 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            background: white;
         }
 
         .auth-header {
@@ -183,13 +201,13 @@ if (isset($db_connection_error)) {
         .form-input {
             width: 100%;
             padding: 14px 16px;
-            background: rgba(255, 255, 255, 0.6);
+            background: #FAFAFA;
             border: 1px solid rgba(0, 0, 0, 0.1);
             border-radius: 12px;
             font-size: 1rem;
             color: var(--primary);
             transition: all 0.2s ease;
-            box-sizing: border-box; /* Fix padding causing width overflow */
+            box-sizing: border-box;
             font-family: inherit;
         }
 
@@ -256,54 +274,13 @@ if (isset($db_connection_error)) {
             margin-bottom: 20px;
             border-left: 3px solid #DC2626;
         }
-        
-        /* Subtle Shine Effect */
-        .auth-card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: -100%;
-            width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            transition: 0.5s;
-            pointer-events: none;
-        }
-        .auth-card:hover::before {
-            left: 100%;
-        }
 
-        /* Loading Overlay */
-        #auth-loading {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(79, 70, 229, 0.1);
-            border-left-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Custom Google Button Style */
         .btn-google {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
             width: 100%;
-            max-width: 340px;
             padding: 12px;
             background: white;
             border: 1px solid #dadce0;
@@ -314,6 +291,7 @@ if (isset($db_connection_error)) {
             cursor: pointer;
             transition: all 0.2s ease;
             box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+            margin: 0 auto;
         }
         .btn-google:hover {
             background: #f8f9fa;
@@ -324,13 +302,37 @@ if (isset($db_connection_error)) {
             width: 20px;
             height: 20px;
         }
+
+        @media (max-width: 900px) {
+            .login-wrapper {
+                flex-direction: column;
+                height: auto;
+                width: 100%;
+                border-radius: 0;
+            }
+            .left-panel {
+                padding: 60px 40px;
+                min-height: 250px;
+            }
+            .left-panel h1 {
+                font-size: 2.5rem;
+            }
+            body {
+                align-items: flex-start;
+                background: white;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="brand-watermark">FIORA</div>
-    
-    <div class="auth-container">
-        <div class="auth-card">
+    <div class="login-wrapper">
+        <div class="left-panel">
+            <div class="panel-content">
+                <!-- Text removed as requested -->
+            </div>
+        </div>
+        
+        <div class="right-panel">
             <div class="auth-header">
                 <h2>Welcome Back</h2>
                 <p>Focus on what matters most.</p>

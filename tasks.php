@@ -115,7 +115,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fiora - Tasks</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <style>
         .filter-section {
             background: rgba(255, 255, 255, 0.4);
@@ -293,7 +293,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                         foreach($categories as $val => $label): ?>
                             <button onclick="window.location.href='tasks.php?category=<?php echo $val; ?>&status=<?php echo $filter_status; ?>&search=<?php echo urlencode($search_query); ?>'" 
                                     class="category-filter-pill <?php echo $filter_category == $val ? 'active' : ''; ?>"
-                                    style="padding: 10px 20px; border-radius: 20px; border: 2px solid var(--glass-border); cursor: pointer; font-weight: 800; transition: all 0.3s; <?php echo $filter_category == $val ? 'background: #222; color: white; border-color: #222; box-shadow: 0 4px 10px rgba(0,0,0,0.2);' : 'background: white; color: #333;'; ?>">
+                                    style="padding: 10px 20px; border-radius: 20px; border: 2px solid var(--glass-border); cursor: pointer; font-weight: 800; transition: all 0.3s; <?php echo $filter_category == $val ? 'background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.2);' : 'background: white; color: var(--primary);'; ?>">
                                 <?php echo $label; ?>
                             </button>
                         <?php endforeach; ?>
@@ -330,7 +330,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                                         <?php echo htmlspecialchars($task['title']); ?>
                                     </div>
                                     <div style="font-size: 0.9rem; color: #222; font-weight: 600; margin-top: 4px;">
-                                        📅 <?php echo date('M d, H:i', strtotime($task['deadline'])); ?> • 🏷️ <?php echo $task['category']; ?>
+                                        📅 <?php echo date('M d, H:i', strtotime($task['deadline'])); ?> • 🏷️ <?php echo htmlspecialchars($task['category'] ?? 'Uncategorized'); ?>
                                     </div>
                                 </div>
                                 <a href="?delete=<?php echo $task['id']; ?>&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" style="color: var(--danger); text-decoration: none; font-size: 1.3rem; font-weight: 900; margin-left: 15px;" onclick="return confirm('Remove task?')">✕</a>

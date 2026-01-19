@@ -47,7 +47,7 @@ $personal_music = $stmt->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Focus Music - Fiora</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <style>
         .music-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
         .track-card {
@@ -141,11 +141,19 @@ $personal_music = $stmt->fetchAll();
     <div id="addModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
         <div class="glass-card" style="width: 400px; padding: 30px;">
             <h3>Add Focus Track</h3>
-            <form method="POST" style="margin-top: 20px;">
-                <input type="text" name="title" class="form-input" style="width: 100%; margin-bottom: 15px;" placeholder="Track Title" required>
-                <input type="text" name="artist" class="form-input" style="width: 100%; margin-bottom: 15px;" placeholder="Artist / Genre" required>
-                <input type="url" name="link" class="form-input" style="width: 100%; margin-bottom: 15px;" placeholder="Streaming Link (YouTube/Spotify)" required>
-                <input type="text" name="playlist_name" class="form-input" style="width: 100%; margin-bottom: 20px;" placeholder="Playlist Name (e.g. My Focus)">
+            <form method="POST" style="margin-top: 20px;" onsubmit="return validateForm(this)">
+                <div class="form-group">
+                    <input type="text" name="title" class="form-input" style="width: 100%; margin-bottom: 5px;" placeholder="Track Title" required onblur="validateField(this)" oninput="clearError(this)">
+                </div>
+                <div class="form-group">
+                    <input type="text" name="artist" class="form-input" style="width: 100%; margin-bottom: 5px;" placeholder="Artist / Genre" required onblur="validateField(this)" oninput="clearError(this)">
+                </div>
+                <div class="form-group">
+                    <input type="url" name="link" class="form-input" style="width: 100%; margin-bottom: 5px;" placeholder="Streaming Link (YouTube/Spotify)" required onblur="validateField(this)" oninput="clearError(this)">
+                </div>
+                <div class="form-group">
+                    <input type="text" name="playlist_name" class="form-input" style="width: 100%; margin-bottom: 20px;" placeholder="Playlist Name (e.g. My Focus)">
+                </div>
                 <div style="display: flex; gap: 10px;">
                     <button type="submit" name="add_personal" class="btn btn-primary" style="flex: 1;">Add Track</button>
                     <button type="button" class="btn btn-secondary" style="flex: 1; color: #000 !important; font-weight: 800;" onclick="document.getElementById('addModal').style.display='none'">Cancel</button>
@@ -153,5 +161,47 @@ $personal_music = $stmt->fetchAll();
             </form>
         </div>
     </div>
+    <script>
+        function validateForm(form) {
+            const requiredInputs = form.querySelectorAll('input[required]');
+            let isValid = true;
+            requiredInputs.forEach(input => {
+                validateField(input);
+                const parent = input.parentElement;
+                if (parent.querySelector('.error-message')) isValid = false;
+            });
+            return isValid;
+        }
+
+        function validateField(input) {
+            const parent = input.parentElement;
+            let error = parent.querySelector('.error-message');
+            if (!input.value.trim()) {
+                if (!error) {
+                    error = document.createElement('div');
+                    error.className = 'error-message';
+                    error.style.color = '#e74c3c';
+                    error.style.fontSize = '0.75rem';
+                    error.style.marginBottom = '10px';
+                    error.style.fontWeight = '600';
+                    error.innerText = 'This field is compulsory';
+                    parent.appendChild(error);
+                    input.style.borderColor = '#e74c3c';
+                }
+            } else {
+                if (error) error.remove();
+                input.style.borderColor = '';
+            }
+        }
+
+        function clearError(input) {
+            const parent = input.parentElement;
+            const error = parent.querySelector('.error-message');
+            if (error) {
+                error.remove();
+                input.style.borderColor = '';
+            }
+        }
+    </script>
 </body>
 </html>

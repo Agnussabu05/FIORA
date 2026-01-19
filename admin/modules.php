@@ -104,6 +104,9 @@ $page = 'modules';
                                 <?php echo $mod['setting_value'] == '1' ? 'Disable' : 'Enable'; ?>
                             </button>
                         </form>
+                        <?php if (strtolower($displayName) === 'reading' && $mod['setting_value'] == '1'): ?>
+                            <a href="reading_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 </div>

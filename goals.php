@@ -66,7 +66,7 @@ foreach ($goals as $g) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goals & Ambitions - Fiora</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <style>
         .goals-grid {
             display: grid;

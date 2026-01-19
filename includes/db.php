@@ -15,12 +15,15 @@ if ($circuit_breaker) {
         // Set a hard timeout for the network stream itself
         ini_set('default_socket_timeout', 3);
 
-        $options = [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_TIMEOUT => 3
-        ];
-        $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password, $options);
+    // Set a hard timeout for the network stream itself
+    ini_set('default_socket_timeout', 3);
+
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 3
+    ];
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password, $options);
     } catch (PDOException $e) {
         $pdo = null;
         $db_connection_error = "Database unavailable: " . $e->getMessage();

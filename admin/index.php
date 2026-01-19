@@ -152,34 +152,10 @@ try {
             SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
         FROM users u
         LEFT JOIN tasks t ON u.id = t.user_id
+        WHERE u.username != 'demo'
     ";
     if ($search) {
-        $user_query .= " WHERE u.username LIKE ?";
-        $params[] = "%$search%";
-    }
-    $user_query .= " GROUP BY u.id, u.username, u.role, u.created_at";
-    $user_query .= " ORDER BY u.created_at DESC";
-    
-    $stmt = $pdo->prepare($user_query);
-    $stmt->execute($params);
-    $users_report = $stmt->fetchAll();
-
-    // --- Users Report Logic (Consolidated) ---
-    $search = $_GET['search'] ?? '';
-    $params = [];
-    $user_query = "
-        SELECT 
-            u.id, 
-            u.username, 
-            u.role, 
-            u.created_at,
-            COUNT(t.id) as total_tasks,
-            SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
-        FROM users u
-        LEFT JOIN tasks t ON u.id = t.user_id
-    ";
-    if ($search) {
-        $user_query .= " WHERE u.username LIKE ?";
+        $user_query .= " AND u.username LIKE ?";
         $params[] = "%$search%";
     }
     $user_query .= " GROUP BY u.id, u.username, u.role, u.created_at";

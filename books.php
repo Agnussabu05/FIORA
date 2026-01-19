@@ -205,7 +205,7 @@ $books = $stmt->fetchAll();
                                 </div>
                                 <div class="book-meta">
                                     <div class="book-price">
-                                        <?php echo $book['price'] > 0 ? '$' . $book['price'] : 'Free'; ?>
+                                        <?php echo $book['price'] > 0 ? '₹' . $book['price'] : 'Free'; ?>
                                     </div>
                                     <div class="book-type-badge">
                                         <?php echo $book['type']; ?>
@@ -295,7 +295,7 @@ $books = $stmt->fetchAll();
                 </div>
 
                 <div class="form-group" id="priceGroup">
-                    <label>Price ($)</label>
+                    <label>Price (₹)</label>
                     <input type="number" name="price" step="0.01" class="form-input" placeholder="10.00">
                 </div>
                 
