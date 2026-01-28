@@ -43,11 +43,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $desc = $_POST['description'];
     $deadline = $_POST['deadline'];
     $category = $_POST['category'] ?? 'Personal';
+    $priority = $_POST['priority'] ?? 'medium';
     
-    $stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, deadline, priority, category, status, estimated_time, recurrent_type, user_order) VALUES (?, ?, ?, ?, 'medium', ?, 'pending', 0, 'none', 0)");
-    $stmt->execute([$user_id, $title, $desc, $deadline, $category]);
+    $stmt = $pdo->prepare("INSERT INTO tasks (user_id, title, description, deadline, priority, category, status, estimated_time, recurrent_type, user_order) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, 'none', 0)");
+    $stmt->execute([$user_id, $title, $desc, $deadline, $priority, $category]);
     
     $_SESSION['task_msg'] = "Task added! 🎯 Another step toward your goals. You've got this!";
+    
+    header("Location: tasks.php?status=$filter_status&category=$filter_category");
+    exit;
+}
+
+// Handle Update Task
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update') {
+    $id = $_POST['task_id'];
+    $title = $_POST['title'];
+    $desc = $_POST['description'];
+    $deadline = $_POST['deadline'];
+    $category = $_POST['category'];
+    $priority = $_POST['priority'];
+    
+    // Verify ownership before updating
+    $stmt = $pdo->prepare("UPDATE tasks SET title = ?, description = ?, deadline = ?, category = ?, priority = ? WHERE id = ? AND user_id = ?");
+    $stmt->execute([$title, $desc, $deadline, $category, $priority, $id, $user_id]);
+    
+    $_SESSION['task_msg'] = "Task updated successfully! 📝";
     
     header("Location: tasks.php?status=$filter_status&category=$filter_category");
     exit;
@@ -79,7 +99,16 @@ if (isset($_GET['delete'])) {
 $query = "SELECT * FROM tasks WHERE user_id = ?";
 $params = [$user_id];
 
-if ($filter_status !== 'all') {
+$current_time = date('Y-m-d H:i:s');
+
+if ($filter_status === 'overdue') {
+    $query .= " AND status = 'pending' AND deadline < ?";
+    $params[] = $current_time;
+} elseif ($filter_status === 'upcoming') {
+    $query .= " AND status = 'pending' AND deadline >= ? AND deadline <= DATE_ADD(?, INTERVAL 7 DAY)";
+    $params[] = $current_time;
+    $params[] = $current_time;
+} elseif ($filter_status !== 'all') {
     $query .= " AND status = ?";
     $params[] = $filter_status;
 }
@@ -94,7 +123,42 @@ if (!empty($search_query)) {
 
 $stmt = $pdo->prepare("$query ORDER BY created_at DESC");
 $stmt->execute($params);
-$tasks = $stmt->fetchAll();
+$tasks = $stmt->fetchAll(PDO::FETCH_ASSOC); // Fetch as associative array for sorting
+
+// Handle Smart Sort
+$smart_sort_active = isset($_GET['sort']) && $_GET['sort'] === 'smart';
+if ($smart_sort_active) {
+    // Calculate scores
+    foreach ($tasks as &$t) {
+        $score = 0;
+        $deadline = strtotime($t['deadline']);
+        $now = time();
+        $diff_hours = ($deadline - $now) / 3600;
+
+        // 1. Urgency
+        if ($diff_hours < 0) $score += 2000;      // Overdue
+        elseif ($diff_hours <= 24) $score += 800; // Today
+        elseif ($diff_hours <= 72) $score += 400; // 3 Days
+        elseif ($diff_hours <= 168) $score += 200;// Week
+
+        // 2. Priority
+        $prio = $t['priority'] ?? 'medium';
+        if ($prio === 'high') $score += 600;
+        elseif ($prio === 'medium') $score += 300;
+        elseif ($prio === 'low') $score += 100;
+
+        // 3. Completeness (push completed to bottom)
+        if ($t['status'] === 'completed') $score -= 5000;
+
+        $t['smart_score'] = $score;
+    }
+    unset($t);
+
+    // Sort by score DESC
+    usort($tasks, function($a, $b) {
+        return $b['smart_score'] <=> $a['smart_score'];
+    });
+}
 
 // Fetch Overdue Tasks (pending tasks past deadline)
 $overdue_query = "SELECT * FROM tasks WHERE user_id = ? AND status = 'pending' AND deadline < NOW() ORDER BY deadline ASC";
@@ -127,30 +191,31 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
             box-shadow: 0 8px 32px rgba(0,0,0,0.05);
         }
         
-        /* Custom Premium Checkbox */
-        .checkbox-wrapper {
+        /* Custom Premium Checkbox Link Style */
+        .checkbox-btn {
             position: relative;
             width: 28px;
             height: 28px;
             margin-right: 15px;
             flex-shrink: 0;
+            cursor: pointer;
+            display: block; /* Important for anchor */
         }
-        .checkbox-wrapper input {
-            position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0;
-        }
-        .checkmark {
+        .checkbox-mark {
             position: absolute; top: 0; left: 0; height: 28px; width: 28px;
             background-color: white; border: 2px solid var(--primary);
             border-radius: 8px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .checkbox-wrapper:hover input ~ .checkmark { background-color: #f0f0f0; transform: scale(1.1); }
-        .checkbox-wrapper input:checked ~ .checkmark { background-color: var(--primary); transform: scale(1.05); }
-        .checkmark:after {
+        .checkbox-btn:hover .checkbox-mark { background-color: #f0f0f0; transform: scale(1.1); }
+        
+        /* Checked State */
+        .checkbox-btn.checked .checkbox-mark { background-color: var(--primary); transform: scale(1.05); }
+        .checkbox-mark:after {
             content: ""; position: absolute; display: none;
             left: 9px; top: 4px; width: 6px; height: 12px;
             border: solid white; border-width: 0 3px 3px 0; transform: rotate(45deg);
         }
-        .checkbox-wrapper input:checked ~ .checkmark:after { display: block; }
+        .checkbox-btn.checked .checkbox-mark:after { display: block; }
 
         .task-item {
             background: var(--glass-bg);
@@ -211,12 +276,37 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
         <?php include 'includes/sidebar.php'; ?>
         
         <main class="main-content">
-            <header class="header">
+            <header class="header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
                 <div>
-                    <h1 style="color: #000 !important;">Tasks & Deadlines</h1>
-                    <p style="color: #222; font-weight: 700;">Organize your life elegantly.</p>
+                    <h1 style="color: #000 !important; margin: 0;">Tasks & Deadlines</h1>
+                    <p style="color: #4b5563; font-weight: 600; margin: 5px 0 0 0;">Organize your life elegantly.</p>
                 </div>
-                <button class="btn btn-primary" onclick="openModal()" style="padding: 12px 25px; font-size: 1rem; border-radius: 12px; font-weight: 800;">+ New Task</button>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <!-- Notification Bell -->
+                    <?php
+                        // Fetch Notifications (Mocking/Simulating Overdue Alerts)
+                        $notif_count = 0;
+                        $notifs = [];
+                        
+                        // Check overdue tasks for notifications
+                        foreach ($tasks as $t) { /* Use fetched tasks */
+                            if ($t['status'] === 'pending' && strtotime($t['deadline']) < time()) {
+                                $notifs[] = ['type' => 'overdue', 'message' => 'Task "' . $t['title'] . '" is overdue!', 'time' => $t['deadline']];
+                            }
+                        }
+                        $notif_count = count($notifs);
+                    ?>
+                    <div style="position: relative;">
+                        <button onclick="openNotificationModal()" style="background: white; border: 1px solid var(--glass-border); width: 45px; height: 45px; border-radius: 12px; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; position: relative;">
+                            🔔
+                            <?php if ($notif_count > 0): ?>
+                                <span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.7rem; font-weight: 800; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #f3f4f6;"><?php echo $notif_count; ?></span>
+                            <?php endif; ?>
+                        </button>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="openModal()" style="padding: 12px 25px; font-size: 1rem; border-radius: 12px; font-weight: 800;">+ New Task</button>
+                </div>
             </header>
 
             <?php if (isset($_SESSION['task_msg'])): ?>
@@ -227,6 +317,117 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                     </div>
                     <button onclick="this.parentElement.remove()" style="background: none; border: none; color: inherit; cursor: pointer; font-size: 1.1rem; opacity: 0.6;">✕</button>
                 </div>
+            <?php endif; ?>
+
+            <!-- Smart Recommendation Engine -->
+            <?php
+            // Logic: Weighted Scoring System (PHP) to balance Priority vs Urgency
+            // Fetch all pending tasks to analyze
+            $recStmt = $pdo->prepare("SELECT * FROM tasks WHERE user_id = ? AND status = 'pending'");
+            $recStmt->execute([$user_id]);
+            $pending_tasks = $recStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $recommended_task = null;
+            $best_score = -1;
+            
+            foreach ($pending_tasks as $t) {
+                $score = 0;
+                $deadline = strtotime($t['deadline']);
+                $now = time();
+                $diff_hours = ($deadline - $now) / 3600;
+
+                // 1. Urgency Score
+                if ($diff_hours < 0) {
+                    $score += 2000; // Overdue is critical
+                } elseif ($diff_hours <= 24) {
+                    $score += 800; // Due today
+                } elseif ($diff_hours <= 72) {
+                    $score += 400; // Due in 3 days
+                } elseif ($diff_hours <= 168) {
+                    $score += 200; // Due within week
+                }
+
+                // 2. Priority Score
+                $prio = $t['priority'] ?? 'medium';
+                if ($prio === 'high') $score += 600;
+                elseif ($prio === 'medium') $score += 300;
+                elseif ($prio === 'low') $score += 100;
+
+                // 3. Tie-breaker: Closer deadline gets slight boost (inverse of hours left)
+                // Avoid division by zero
+                if ($diff_hours > 0) {
+                    $score += (1000 / ($diff_hours + 1)); 
+                }
+
+                if ($score > $best_score) {
+                    $best_score = $score;
+                    $recommended_task = $t;
+                }
+            }
+            ?>
+
+            <?php if ($recommended_task):
+                // Reason Logic
+                $rec_deadline = new DateTime($recommended_task['deadline']);
+                $rec_now = new DateTime();
+                $rec_diff = $rec_now->diff($rec_deadline);
+                $is_overdue = $rec_now > $rec_deadline;
+                
+                $reason = "Smart Recommendation";
+                $icon = "⚡";
+                $bg_style = "background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);"; // Indigo/Purple gradient
+                
+                if ($is_overdue) {
+                    $reason = "Overdue - Action Required!";
+                    $icon = "⚠️";
+                    $bg_style = "background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);"; // Red
+                } elseif ($rec_diff->days < 1 && $recommended_task['priority'] === 'high') {
+                    $reason = "🔥 High Priority & Due Today!";
+                    $icon = "🚨";
+                    $bg_style = "background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);"; // Orange/Red
+                } elseif ($recommended_task['priority'] === 'high') {
+                    $reason = "High Priority Focus";
+                    $icon = "🔥";
+                    $bg_style = "background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);"; // Amber
+                } elseif ($rec_diff->days < 1) {
+                     $reason = "Due Today - Stay on Track";
+                     $icon = "📅";
+                     $bg_style = "background: linear-gradient(135deg, #10b981 0%, #059669 100%);"; // Green
+                }
+            ?>
+            <div style="<?php echo $bg_style; ?> border-radius: 20px; padding: 2px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); position: relative; overflow: hidden; animation: slideDown 0.5s ease-out;">
+                <div style="background: rgba(255, 255, 255, 0.95); border-radius: 18px; padding: 25px; position: relative; z-index: 2;">
+                    <div style="position: absolute; top: 0; right: 0; padding: 15px 20px; background: rgba(0,0,0,0.05); border-bottom-left-radius: 20px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #555;">
+                        AI Recommended
+                    </div>
+                    
+                    <div style="display: flex; gap: 20px; align-items: flex-start;">
+                        <div style="background: rgba(0,0,0,0.03); width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0;">
+                            <?php echo $icon; ?>
+                        </div>
+                        <div style="flex: 1;">
+                            <h4 style="margin: 0 0 5px 0; color: #666; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;"><?php echo $reason; ?></h4>
+                            <h2 style="margin: 0 0 10px 0; color: #111; font-size: 1.5rem; font-weight: 800; line-height: 1.3;">
+                                <?php echo htmlspecialchars($recommended_task['title']); ?>
+                            </h2>
+                            <div style="display: flex; align-items: center; gap: 15px; font-size: 0.9rem; color: #444; font-weight: 500;">
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    ClockIcon <?php echo date('M d, g:i A', strtotime($recommended_task['deadline'])); ?>
+                                </span>
+                                <span style="display: flex; align-items: center; gap: 6px;">
+                                    TagIcon <?php echo htmlspecialchars($recommended_task['category']); ?>
+                                </span>
+                            </div>
+                        </div>
+                        <div style="align-self: center; display: flex; flex-direction: column; gap: 10px;">
+                            <a href="?toggle_status=<?php echo $recommended_task['id']; ?>&new_status=completed&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" 
+                               style="background: var(--primary); color: white; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: 700; text-align: center; box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3); transition: transform 0.2s;">
+                                Complete
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <?php endif; ?>
 
             <div class="tasks-layout">
@@ -271,20 +472,33 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
 
                 <!-- Status Tabs -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <div class="tab-group" style="background: rgba(255,255,255,0.6); padding: 5px; border-radius: 15px; display: inline-flex; gap: 5px; border: 1px solid var(--glass-border);">
+                    <!-- Left: Standard Filters -->
+                    <div class="tab-group" style="background: rgba(255,255,255,0.6); padding: 5px; border-radius: 15px; display: inline-flex; gap: 5px; flex-wrap: wrap; border: 1px solid var(--glass-border);">
                         <?php 
-                        $statuses = ['all' => '📋 All', 'pending' => '⏳ Pending', 'completed' => '✅ Completed'];
-                        foreach($statuses as $val => $label): ?>
+                        $main_statuses = [
+                            'all' => ['label' => '📋 All', 'color' => 'var(--primary)'],
+                            'pending' => ['label' => '⏳ Pending', 'color' => '#f59e0b'], 
+                            'completed' => ['label' => '✅ Completed', 'color' => '#10b981']
+                        ];
+                        
+                        foreach($main_statuses as $val => $style): 
+                            $isActive = $filter_status == $val;
+                            $btnBg = $isActive ? $style['color'] : 'transparent';
+                            $btnColor = $isActive ? 'white' : '#555';
+                            $shadow = $isActive ? '0 4px 12px rgba(0,0,0,0.15)' : 'none';
+                        ?>
                             <button onclick="window.location.href='tasks.php?status=<?php echo $val; ?>&category=<?php echo $filter_category; ?>&search=<?php echo urlencode($search_query); ?>'" 
-                                    class="filter-pill <?php echo $filter_status == $val ? 'active' : ''; ?>"
-                                    style="padding: 10px 20px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; transition: all 0.3s; <?php echo $filter_status == $val ? 'background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(105, 126, 80, 0.3);' : 'background: transparent; color: var(--primary);'; ?>">
-                                <?php echo $label; ?>
+                                    class="filter-pill <?php echo $isActive ? 'active' : ''; ?>"
+                                    style="padding: 10px 18px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; transition: all 0.3s; background: <?php echo $btnBg; ?>; color: <?php echo $btnColor; ?>; box-shadow: <?php echo $shadow; ?>;">
+                                <?php echo $style['label']; ?>
                             </button>
                         <?php endforeach; ?>
                     </div>
+
+
                 </div>
 
-                <!-- Category Pills & Urgent Toggles -->
+                <!-- Category Pills -->
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                         <span style="font-weight: 800; font-size: 0.95rem; color: #000; margin-right: 5px;">Filter Category:</span>
@@ -299,19 +513,11 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                         <?php endforeach; ?>
                     </div>
 
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <?php if (count($overdue_tasks) > 0): ?>
-                            <button onclick="openUrgentModal('overdue')" class="urgent-toggle-btn overdue" style="padding: 8px 16px; font-size: 0.85rem; border-radius: 12px;">
-                                <span>⚠️</span> Overdue Task (<?php echo count($overdue_tasks); ?>)
-                            </button>
-                        <?php endif; ?>
-                        
-                        <?php if (count($upcoming_tasks) > 0): ?>
-                            <button onclick="openUrgentModal('upcoming')" class="urgent-toggle-btn upcoming" style="padding: 8px 16px; font-size: 0.85rem; border-radius: 12px;">
-                                <span>📅</span> Upcoming Task (<?php echo count($upcoming_tasks); ?>)
-                            </button>
-                        <?php endif; ?>
-                    </div>
+                    <!-- Right: Smart Sort -->
+                    <button onclick="window.location.href='tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>&search=<?php echo urlencode($search_query); ?>&sort=<?php echo $smart_sort_active ? 'default' : 'smart'; ?>'" 
+                            style="padding: 10px 20px; border-radius: 15px; border: none; cursor: pointer; font-weight: 800; transition: all 0.3s; display: flex; align-items: center; gap: 8px; <?php echo $smart_sort_active ? 'background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);' : 'background: white; color: 666; border: 1px solid var(--glass-border);'; ?>">
+                        <span>✨</span> Smart Sort <?php echo $smart_sort_active ? 'On' : 'Off'; ?>
+                    </button>
                 </div>
             </div>
 
@@ -320,20 +526,46 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                     <?php if (count($tasks) > 0): ?>
                         <?php foreach($tasks as $task): ?>
                             <div class="task-item <?php echo $task['status']; ?>">
-                                <div class="checkbox-wrapper">
-                                    <input type="checkbox" <?php echo $task['status'] === 'completed' ? 'checked' : ''; ?> 
-                                           onchange="window.location.href='?toggle_status=<?php echo $task['id']; ?>&new_status=' + (this.checked ? 'completed' : 'pending') + '&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>'">
-                                    <span class="checkmark"></span>
-                                </div>
+                                <?php 
+                                    $next_status = $task['status'] === 'completed' ? 'pending' : 'completed';
+                                    $is_checked = $task['status'] === 'completed' ? 'checked' : '';
+                                ?>
+                                <a href="?toggle_status=<?php echo $task['id']; ?>&new_status=<?php echo $next_status; ?>&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>&search=<?php echo urlencode($search_query); ?>" 
+                                   class="checkbox-btn <?php echo $is_checked; ?>" title="Mark as <?php echo ucfirst($next_status); ?>">
+                                    <span class="checkbox-mark"></span>
+                                </a>
                                 <div style="flex: 1;">
                                     <div class="task-title" style="font-weight: 700; font-size: 1.15rem; color: #000;">
                                         <?php echo htmlspecialchars($task['title']); ?>
                                     </div>
-                                    <div style="font-size: 0.9rem; color: #222; font-weight: 600; margin-top: 4px;">
-                                        📅 <?php echo date('M d, H:i', strtotime($task['deadline'])); ?> • 🏷️ <?php echo htmlspecialchars($task['category'] ?? 'Uncategorized'); ?>
+                                    <div style="font-size: 0.9rem; color: #222; font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 10px;">
+                                        <span>📅 <?php echo date('M d, H:i', strtotime($task['deadline'])); ?></span>
+                                        <span>🏷️ <?php echo htmlspecialchars($task['category'] ?? 'Uncategorized'); ?></span>
+                                        
+                                        <?php 
+                                        $prio = $task['priority'] ?? 'medium';
+                                        $prioIcon = $prio === 'high' ? '🔥' : ($prio === 'low' ? '☁️' : '🔹');
+                                        if($prio === 'high'): ?>
+                                            <span style="color: #dc2626;" title="High Priority"><?php echo $prioIcon; ?> High</span>
+                                        <?php elseif($prio === 'low'): ?>
+                                            <span style="color: #64748b;" title="Low Priority"><?php echo $prioIcon; ?> Low</span>
+                                        <?php else: ?>
+                                            <span style="color: #3b82f6;" title="Medium Priority"><?php echo $prioIcon; ?> Med</span>
+                                        <?php endif; ?>
+
+                                        <?php if ($task['status'] === 'pending'): ?>
+                                            <?php if (strtotime($task['deadline']) < time()): ?>
+                                                <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">⚠️ Overdue</span>
+                                            <?php else: ?>
+                                                <span style="background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">⏳ Pending</span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800;">✅ Completed</span>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
-                                <a href="?delete=<?php echo $task['id']; ?>&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" style="color: var(--danger); text-decoration: none; font-size: 1.3rem; font-weight: 900; margin-left: 15px;" onclick="return confirm('Remove task?')">✕</a>
+                                <button onclick='openEditModal(<?php echo json_encode($task, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>)' style="background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 10px; margin-right: 5px;">✏️</button>
+                                <a href="?delete=<?php echo $task['id']; ?>&status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" style="color: var(--danger); text-decoration: none; font-size: 1.3rem; font-weight: 900; margin-left: 10px;" onclick="return confirm('Remove task?')">✕</a>
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
@@ -398,7 +630,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
 </main> <!-- Closes main-content -->
 </div> <!-- Closes app-container -->
 
-    <!-- Modal -->
+    <!-- Add Task Modal -->
     <div class="modal" id="taskModal">
         <div class="glass-card" style="width: 450px;">
             <h3 style="margin-bottom: 20px;">Add New Task</h3>
@@ -420,6 +652,15 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 </div>
 
                 <div class="form-group">
+                    <label>Priority <span style="color: #ef4444;">*</span></label>
+                    <select name="priority" id="task-priority" class="form-input" required>
+                        <option value="medium">🔹 Medium</option>
+                        <option value="high">🔥 High</option>
+                        <option value="low">☁️ Low</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label>Deadline <span style="color: #ef4444;">*</span></label>
                     <input type="datetime-local" name="deadline" id="task-deadline" class="form-input" required>
                 </div>
@@ -436,6 +677,55 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 25px;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()" style="color: #000 !important; font-weight: 800;">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div class="modal" id="editTaskModal">
+        <div class="glass-card" style="width: 450px;">
+            <h3 style="margin-bottom: 20px;">Edit Task</h3>
+            <form action="tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" method="POST">
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="task_id" id="edit-task-id">
+                
+                <div class="form-group">
+                    <label>Title <span style="color: #ef4444;">*</span></label>
+                    <input type="text" name="title" id="edit-task-title" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Category <span style="color: #ef4444;">*</span></label>
+                    <select name="category" id="edit-task-category" class="form-input" required>
+                        <option value="Personal">Personal</option>
+                        <option value="Work">Work</option>
+                        <option value="Health">Health</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Priority <span style="color: #ef4444;">*</span></label>
+                    <select name="priority" id="edit-task-priority" class="form-input" required>
+                        <option value="medium">🔹 Medium</option>
+                        <option value="high">🔥 High</option>
+                        <option value="low">☁️ Low</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Deadline <span style="color: #ef4444;">*</span></label>
+                    <input type="datetime-local" name="deadline" id="edit-task-deadline" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Description (Optional)</label>
+                    <textarea name="description" id="edit-task-desc" class="form-input" rows="3"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 25px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()" style="color: #000 !important; font-weight: 800;">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -717,12 +1007,47 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
             document.getElementById('urgentModal').classList.remove('active');
         }
 
+        // Edit Modal Functions
+        function openEditModal(task) {
+            document.getElementById('edit-task-id').value = task.id || '';
+            document.getElementById('edit-task-title').value = task.title || '';
+            document.getElementById('edit-task-category').value = task.category || 'Personal';
+            document.getElementById('edit-task-priority').value = task.priority || 'medium';
+            
+            // Safe deadline handling
+            if (task.deadline) {
+                document.getElementById('edit-task-deadline').value = task.deadline.replace(' ', 'T'); 
+            } else {
+                document.getElementById('edit-task-deadline').value = '';
+            }
+            
+            document.getElementById('edit-task-desc').value = task.description || '';
+            
+            document.getElementById('editTaskModal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editTaskModal').classList.remove('active');
+        }
+
+        function toggleTaskStatus(taskId, isChecked) {
+            const newStatus = isChecked ? 'completed' : 'pending';
+            // Use current URL params to maintain filters
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('toggle_status', taskId);
+            urlParams.set('new_status', newStatus);
+            
+            window.location.href = 'tasks.php?' + urlParams.toString();
+        }
+
         // Close modal when clicking outside
         window.onclick = function(event) {
             const urgentModal = document.getElementById('urgentModal');
             const taskModal = document.getElementById('taskModal');
+            const editModal = document.getElementById('editTaskModal');
             if (event.target == urgentModal) closeUrgentModal();
             if (event.target == taskModal) closeModal();
+            if (event.target == editModal) closeEditModal();
         }
     </script>
 
@@ -801,6 +1126,48 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 </div>
             </div>
         </div>
+    <!-- Notification Modal -->
+    <div class="modal" id="notificationModal">
+        <div class="glass-card" style="width: 450px; max-height: 80vh; display: flex; flex-direction: column; padding: 0;">
+            <div style="padding: 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;">Notifications</h3>
+                <button onclick="closeNotificationModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <div style="padding: 20px; overflow-y: auto; flex: 1;">
+                <?php if (empty($notifs)): ?>
+                    <div style="text-align: center; color: #9ca3af; padding: 20px;">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">💤</div>
+                        No new notifications.
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($notifs as $n): ?>
+                        <div style="padding: 15px; background: #fff0f0; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #ef4444;">
+                            <div style="font-weight: 700; color: #7f1d1d; font-size: 0.95rem; margin-bottom: 4px;">⚠️ Overdue Alert</div>
+                            <div style="color: #4b5563; font-size: 0.9rem;"><?php echo htmlspecialchars($n['message']); ?></div>
+                            <div style="font-size: 0.8rem; color: #9ca3af; margin-top: 5px;"><?php echo date('M d, H:i', strtotime($n['time'])); ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+            
+            <div style="padding: 15px; border-top: 1px solid #f0f0f0; text-align: center;">
+                <button onclick="alert('View All History feature coming soon!')" style="background: none; border: none; color: var(--primary-color); font-weight: 700; cursor: pointer;">View All History</button>
+            </div>
+        </div>
     </div>
+
+    <script>
+        function openNotificationModal() {
+            document.getElementById('notificationModal').classList.add('active');
+        }
+        function closeNotificationModal() {
+            document.getElementById('notificationModal').classList.remove('active');
+        }
+        document.getElementById('notificationModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('notificationModal')) closeNotificationModal();
+        });
+    </script>
+    </div> <!-- Close app-container -->
 </body>
 </html>

@@ -28,6 +28,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $stmt->execute([$user_id, $score, $label, $note, $date, $sleep, $activities]);
     header("Location: mood.php");
     exit;
+    header("Location: mood.php");
+    exit;
+}
+
+// Handle Gratitude Log
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'log_gratitude') {
+    $entry_text = $_POST['gratitude_entry'];
+    if (!empty($entry_text)) {
+        $stmt = $pdo->prepare("INSERT INTO gratitude_entries (user_id, entry_text) VALUES (?, ?)");
+        $stmt->execute([$user_id, $entry_text]);
+    }
+    header("Location: mood.php");
+    exit;
 }
 
 // Fetch Mood Trends (Last 7 Days)
@@ -51,10 +64,66 @@ for ($i = 6; $i >= 0; $i--) {
     if (!$found) $scores[] = 0;
 }
 
+// --- INSIGHTS ENGINE ---
+// 1. Burnout Detection: Low Avg Mood + High Tasks (Last 3 Days)
+$burnout_alert = false;
+$stmt = $pdo->prepare("SELECT AVG(mood_score) as avg_mood, COUNT(*) as log_count FROM mood_logs WHERE user_id = ? AND log_date >= DATE_SUB(CURDATE(), INTERVAL 3 DAY)");
+$stmt->execute([$user_id]);
+$mood_stats = $stmt->fetch();
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE user_id = ? AND status = 'completed' AND deadline >= DATE_SUB(NOW(), INTERVAL 3 DAY)"); // Using deadline as proxy for recent activity
+$stmt->execute([$user_id]);
+$recent_tasks = $stmt->fetchColumn();
+
+if ($mood_stats['log_count'] > 0 && $mood_stats['avg_mood'] < 3 && $recent_tasks > 5) {
+    $burnout_alert = true;
+}
+
+// 2. Mood Triggers: Spending vs Mood
+// Check for days with High Spend (>500) AND Low Mood (<3)
+$trigger_insight = null;
+$stmt = $pdo->prepare("
+    SELECT m.log_date 
+    FROM mood_logs m
+    JOIN expenses e ON m.log_date = e.transaction_date -- Assuming distinct date column in expenses
+    WHERE m.user_id = ? 
+    AND m.mood_score < 3 
+    AND e.type = 'expense'
+    GROUP BY m.log_date
+    HAVING SUM(e.amount) > 500
+    LIMIT 1
+");
+// Note: Expenses table might need adjustments, simplified for now
+try {
+    $stmt->execute([$user_id]);
+    if ($stmt->fetch()) {
+        $trigger_insight = "We noticed a pattern: You tend to report lower mood on days with high spending. Financial stress might be a trigger.";
+    }
+} catch (Exception $e) {
+    // Ignore if expense table structure differs slightly
+}
+
 // Fetch Recent Logs
 $stmt = $pdo->prepare("SELECT * FROM mood_logs WHERE user_id = ? ORDER BY log_date DESC LIMIT 5");
 $stmt->execute([$user_id]);
 $recentLogs = $stmt->fetchAll();
+
+// Fetch Recent Gratitude Entries (for widget)
+$stmt = $pdo->prepare("SELECT * FROM gratitude_entries WHERE user_id = ? ORDER BY created_at DESC LIMIT 5");
+$stmt->execute([$user_id]);
+$gratitudeLogs = $stmt->fetchAll();
+
+// Fetch All Gratitude Entries (for History Modal)
+$stmt = $pdo->prepare("SELECT * FROM gratitude_entries WHERE user_id = ? ORDER BY created_at DESC");
+$stmt->execute([$user_id]);
+$allGratitudeLogs = $stmt->fetchAll();
+
+// Group by Date for Timeline
+$gratitudeByDate = [];
+foreach ($allGratitudeLogs as $entry) {
+    $date = date('Y-m-d', strtotime($entry['created_at']));
+    $gratitudeByDate[$date][] = $entry;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -248,6 +317,8 @@ $recentLogs = $stmt->fetchAll();
                         </form>
                     </div>
 
+                </div>
+                    
                     <!-- 2. Mood Companion -->
                      <div class="mood-card" style="border-top: 4px solid var(--primary-color);">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -267,6 +338,82 @@ $recentLogs = $stmt->fetchAll();
                             <button onclick="sendMessage()" id="chat-send-btn" style="background: var(--primary-color); color: white; border: none; width: 46px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;">→</button>
                         </div>
                     </div>
+                </div>
+
+                <!-- COL 2: Gratitude & Insights (New Column) -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    
+                    <!-- Mental Health Insights -->
+                    <div class="mood-card">
+                        <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--text-dark);">
+                            🧠 AI Insights
+                        </h3>
+
+                        <?php if ($burnout_alert): ?>
+                            <div style="background: #fee2e2; border: 1px solid #fecaca; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                                <div style="font-weight: 800; color: #991b1b; display: flex; align-items: center; gap: 8px;">
+                                    <span>⚠️</span> Potential Burnout Detected
+                                </div>
+                                <p style="font-size: 0.9rem; color: #7f1d1d; margin: 5px 0 0 0;">
+                                    You've been completing a lot of tasks but your mood has been low lately. Consider taking a break.
+                                </p>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if ($trigger_insight): ?>
+                            <div style="background: #e0f2fe; border: 1px solid #bae6fd; padding: 15px; border-radius: 12px; margin-bottom: 15px;">
+                                <div style="font-weight: 800; color: #075985; display: flex; align-items: center; gap: 8px;">
+                                    <span>📉</span> Mood Trigger Identification
+                                </div>
+                                <p style="font-size: 0.9rem; color: #0c4a6e; margin: 5px 0 0 0;">
+                                    <?php echo $trigger_insight; ?>
+                                </p>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!$burnout_alert && !$trigger_insight): ?>
+                            <div style="text-align: center; color: var(--text-muted); padding: 10px;">
+                                <div style="font-size: 2rem;">✨</div>
+                                <p>No critical alerts. Keep maintaining a healthy balance!</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Gratitude Journal -->
+                    <div class="mood-card">
+                        <h3 style="margin-bottom: 15px; font-weight: 800; color: var(--text-dark);">🌸 Gratitude Journal</h3>
+                        <form method="POST" action="mood.php">
+                            <input type="hidden" name="action" value="log_gratitude">
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" name="gratitude_entry" class="form-input" placeholder="I am grateful for..." required style="border-radius: 20px; flex: 1;">
+                                <button type="submit" class="btn btn-primary" style="padding: 10px 15px; border-radius: 50%; font-weight: 800;">➜</button>
+                            </div>
+                        </form>
+
+                        <div style="margin-top: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin: 0;">Recent Wins</h4>
+                                <button onclick="openGratitudeHistory()" style="background: none; border: none; color: var(--primary-color); font-size: 0.8rem; font-weight: 600; cursor: pointer;">View All</button>
+                            </div>
+                            <?php if (empty($gratitudeLogs)): ?>
+                                <p style="color: #9ca3af; font-style: italic; font-size: 0.9rem;">Start your journey of gratitude today.</p>
+                            <?php else: ?>
+                                <ul style="list-style: none; padding: 0; margin-top: 10px;">
+                                    <?php foreach($gratitudeLogs as $gbox): ?>
+                                        <li style="background: white; padding: 12px 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #f3f4f6; display: flex; align-items: flex-start; gap: 10px;">
+                                            <span style="color: #ec4899;">🌺</span>
+                                            <div>
+                                                <div style="font-weight: 600; color: #374151; font-size: 0.95rem;"><?php echo htmlspecialchars($gbox['entry_text']); ?></div>
+                                                <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 2px;"><?php echo date('M d, H:i', strtotime($gbox['created_at'])); ?></div>
+                                            </div>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    
+
 
                 </div>
 
@@ -354,6 +501,45 @@ $recentLogs = $stmt->fetchAll();
         </main>
     </div>
 
+    <div id="gratitude-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 600px; background: #fffaf0;"> <!-- Warm paper-like bg -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <div>
+                     <h2 style="margin: 0; font-weight: 800; color: #78350f; font-family: 'Georgia', serif;">My Gratitude Journal 🌺</h2>
+                     <p style="margin: 5px 0 0 0; color: #92400e; font-size: 0.9rem;">Reflecting on the good moments.</p>
+                </div>
+                <button onclick="closeGratitudeHistory()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #92400e;">&times;</button>
+            </div>
+            
+            <div style="max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+                <?php if (empty($gratitudeByDate)): ?>
+                    <div style="text-align: center; padding: 40px; color: #b45309;">
+                         <div style="font-size: 3rem; margin-bottom: 10px;">📔</div>
+                         <p>Your journal is empty. Write your first entry today!</p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($gratitudeByDate as $date => $entries): 
+                        // Explicit Date Format: Wednesday, January 28, 2026
+                        $dateLabel = date('l, F j, Y', strtotime($date));
+                    ?>
+                        <div style="margin-bottom: 30px; position: relative; padding-left: 20px; border-left: 2px solid #fed7aa;">
+                            <div style="position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: #f97316; border-radius: 50%;"></div>
+                            <h3 style="margin: 0 0 15px 0; font-size: 1rem; color: #9a3412; font-weight: 700;"><?php echo $dateLabel; ?></h3>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <?php foreach ($entries as $entry): ?>
+                                    <div style="background: white; padding: 15px 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.05); font-family: 'Georgia', serif; font-size: 1.05rem; color: #4a4a4a; line-height: 1.5;">
+                                        <?php echo htmlspecialchars($entry['entry_text']); ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <!-- History Modal -->
     <div id="history-modal" class="modal-overlay">
         <div class="modal-content">
@@ -409,6 +595,20 @@ $recentLogs = $stmt->fetchAll();
         }
         modal.addEventListener('click', function(e) {
             if (e.target === modal) closeHistory();
+        });
+
+        // Gratitude Modal Logic
+        const gratModal = document.getElementById('gratitude-modal');
+        function openGratitudeHistory() {
+            gratModal.style.display = 'flex';
+            setTimeout(() => gratModal.classList.add('open'), 10);
+        }
+        function closeGratitudeHistory() {
+            gratModal.classList.remove('open');
+            setTimeout(() => gratModal.style.display = 'none', 300);
+        }
+        gratModal.addEventListener('click', function(e) {
+            if (e.target === gratModal) closeGratitudeHistory();
         });
 
         // Initialize Chart

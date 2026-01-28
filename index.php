@@ -49,6 +49,7 @@ $user_habits = $stmt->fetchAll();
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -73,7 +74,12 @@ $user_habits = $stmt->fetchAll();
                     <h1><?php echo $greeting; ?>, <?php echo htmlspecialchars($username); ?> <?php echo $emoji; ?></h1>
                     <p style="color: var(--text-muted);">Let's make today productive.</p>
                 </div>
-                <div style="display: flex; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                     <!-- Share Button -->
+                    <button class="btn" onclick="openSnapshotModal()" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);">
+                        📸 Share Progress
+                    </button>
+
                     <!-- Notification Bell -->
                     <div class="notification-wrapper">
                         <div class="notification-bell" id="bellIcon">
@@ -110,6 +116,73 @@ $user_habits = $stmt->fetchAll();
                     <button class="btn btn-primary" onclick="alert('Quick add feature coming soon!')">+ Quick Add</button>
                 </div>
             </header>
+
+    <!-- Snapshot Modal -->
+    <div class="modal" id="snapshotModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div class="glass-card" style="width: 400px; padding: 0; overflow: hidden; position: relative;">
+            <div style="padding: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;">Weekly Snapshot</h3>
+                <button onclick="closeSnapshotModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <div style="padding: 20px; display: flex; flex-direction: column; align-items: center; background: #f8fafc;" id="snapshotPreviewContainer">
+                <!-- The Card to Capture -->
+                <div id="weeklySnapshotCard" style="width: 340px; background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); border-radius: 20px; padding: 25px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); border: 1px solid white;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Week of <?php echo date('M d'); ?></div>
+                            <div style="font-size: 1.4rem; font-weight: 800; color: #1e293b;">Fiora Summary</div>
+                        </div>
+                        <div style="font-size: 2rem;">🚀</div>
+                    </div>
+
+                    <!-- Task Progress -->
+                    <div style="background: white; padding: 15px; border-radius: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+                        <div style="font-size: 0.9rem; font-weight: 600; color: #475569; margin-bottom: 8px;">Task Completion</div>
+                        <div style="display: flex; align-items: flex-end; gap: 5px; margin-bottom: 8px;">
+                            <span style="font-size: 2rem; font-weight: 800; color: #0f3460; line-height: 1;"><?php echo $task_progress; ?>%</span>
+                            <span style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 3px;">done</span>
+                        </div>
+                        <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="width: <?php echo $task_progress; ?>%; background: #0f3460; height: 100%; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Row -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <div style="flex: 1; background: #dcfce7; padding: 15px; border-radius: 15px; text-align: center;">
+                            <div style="font-size: 1.5rem;">✅</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: #166534;"><?php echo $completed_tasks; ?></div>
+                            <div style="font-size: 0.7rem; font-weight: 700; color: #166534; text-transform: uppercase;">Tasks Done</div>
+                        </div>
+                        <div style="flex: 1; background: #fee2e2; padding: 15px; border-radius: 15px; text-align: center;">
+                            <div style="font-size: 1.5rem;">⏳</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: #991b1b;"><?php echo $remaining_tasks; ?></div>
+                            <div style="font-size: 0.7rem; font-weight: 700; color: #991b1b; text-transform: uppercase;">Pending</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mini Mood Chart -->
+                    <div style="background: white; padding: 15px; border-radius: 15px;">
+                        <div style="font-size: 0.9rem; font-weight: 600; color: #475569; margin-bottom: 10px;">Mood Trend</div>
+                        <div style="height: 100px; width: 100%;">
+                            <canvas id="snapshotMoodChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px; text-align: center; font-size: 0.8rem; color: #94a3b8; font-weight: 500;">
+                        Generated by Fiora
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding: 20px; border-top: 1px solid rgba(0,0,0,0.05); text-align: center;">
+                <button onclick="downloadSnapshot()" class="btn btn-primary" style="width: 100%; justify-content: center;">
+                    📥 Download Image
+                </button>
+            </div>
+        </div>
+    </div>
 
             <!-- Static Notifications Section removed for interactive dropdown -->
 
@@ -297,6 +370,67 @@ $user_habits = $stmt->fetchAll();
         dropdown.addEventListener('click', (e) => {
             e.stopPropagation();
         });
+
+        // --- SNAPSHOT FUNCTIONALITY ---
+        let snapshotChartInstance = null;
+
+        function openSnapshotModal() {
+            const modal = document.getElementById('snapshotModal');
+            modal.style.display = 'flex';
+            
+            // Render the specific chart for the snapshot (Mini version)
+            if (snapshotChartInstance) {
+                snapshotChartInstance.destroy();
+            }
+            
+            const ctx = document.getElementById('snapshotMoodChart').getContext('2d');
+            snapshotChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], // Brief labels
+                    datasets: [{
+                        label: 'Mood',
+                        data: [3, 4, 3, 5, 4, 2, 4], // Using same data for demo
+                        borderColor: '#6366f1',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#6366f1',
+                        tension: 0.4,
+                        fill: true,
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        y: { display: false, min: 1, max: 5 }, 
+                        x: { grid: { display: false }, ticks: { fontSize: 10 } } 
+                    }
+                }
+            });
+        }
+
+        function closeSnapshotModal() {
+            document.getElementById('snapshotModal').style.display = 'none';
+        }
+
+        function downloadSnapshot() {
+            const element = document.getElementById('weeklySnapshotCard');
+            
+            html2canvas(element, {
+                scale: 2, // High resolution
+                backgroundColor: null, // Transparent background support
+                logging: false,
+                useCORS: true // Try to capture external images if any
+            }).then(canvas => {
+                // Convert to image
+                const link = document.createElement('a');
+                link.download = 'Fiora_Weekly_Snapshot.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
     </script>
 </body>
 </html>

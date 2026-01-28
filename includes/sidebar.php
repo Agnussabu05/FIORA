@@ -20,11 +20,9 @@ if (isset($pdo) && isset($_SESSION['user_id'])) {
                 <?php endif; ?>
             </a>
         </li>
-        <li class="nav-item">
             <a href="tasks.php" class="nav-link <?php echo ($page == 'tasks') ? 'active' : ''; ?>">
                 <span>✅</span> Tasks
             </a>
-        </li>
         <li class="nav-item">
             <a href="habits.php" class="nav-link <?php echo ($page == 'habits') ? 'active' : ''; ?>">
                 <span>🔥</span> Habits
