@@ -70,11 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid_token) {
         }
         
         body {
-            background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
-                        url('https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?q=80&w=2572&auto=format&fit=crop');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
             min-height: 100vh;
             margin: 0;
             display: flex;
@@ -165,6 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid_token) {
             <?php if($error): ?>
                 <div class="error"><?php echo $error; ?></div>
             <?php endif; ?>
+            <div id="js-error" class="error" style="display: none;"></div>
 
             <?php if($valid_token): ?>
                 <form method="POST">
@@ -179,5 +176,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $valid_token) {
             </div>
         </div>
     </div>
+    <script>
+        const form = document.querySelector('form');
+        if (form) {
+            const passInput = form.querySelector('input[name="password"]');
+            const confirmInput = form.querySelector('input[name="confirm_password"]');
+            const error = document.getElementById('js-error');
+
+            function validatePassword() {
+                if (confirmInput.value && passInput.value !== confirmInput.value) {
+                     error.textContent = "Passwords do not match.";
+                     error.style.display = 'block';
+                } else {
+                     error.style.display = 'none';
+                }
+            }
+
+            passInput.addEventListener('input', validatePassword);
+            confirmInput.addEventListener('input', validatePassword);
+
+            form.addEventListener('submit', function(e) {
+                if (passInput.value !== confirmInput.value) {
+                    e.preventDefault();
+                    validatePassword();
+                }
+            });
+        }
+    </script>
 </body>
 </html>

@@ -6,6 +6,19 @@ $page = 'goals';
 $user_id = $_SESSION['user_id'];
 $username = $_SESSION['username'];
 
+// Points System & Quotes
+$quotes = [
+    "The only way to do great work is to love what you do. - Steve Jobs",
+    "Believe you can and you're halfway there. - Theodore Roosevelt",
+    "Your time is limited, don't waste it living someone else's life. - Steve Jobs",
+    "Dream big and dare to fail. - Norman Vaughan",
+    "It always seems impossible until it's done. - Nelson Mandela",
+    "Don't watch the clock; do what it does. Keep going. - Sam Levenson",
+    "The secret of getting ahead is getting started. - Mark Twain",
+    "What you get by achieving your goals is not as important as what you become by achieving them. - Zig Ziglar"
+];
+$randomQuote = $quotes[array_rand($quotes)];
+
 // Handle Actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -24,15 +37,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if ($action === 'toggle_status') {
         $id = $_POST['goal_id'];
-        $stmt = $pdo->prepare("SELECT status FROM goals WHERE id = ? AND user_id = ?");
+        $stmt = $pdo->prepare("SELECT status, points FROM goals WHERE id = ? AND user_id = ?");
         $stmt->execute([$id, $user_id]);
-        $current = $stmt->fetchColumn();
+        $goal = $stmt->fetch();
+        
+        $current = $goal['status'];
         $new_status = ($current === 'active') ? 'completed' : 'active';
         $new_progress = ($new_status === 'completed') ? 100 : 0;
         
-        $stmt = $pdo->prepare("UPDATE goals SET status = ?, progress = ? WHERE id = ? AND user_id = ?");
-        $stmt->execute([$new_status, $new_progress, $id, $user_id]);
-        echo json_encode(['success' => true]);
+        // Gamification Logic
+        $points_change = 0;
+        if ($new_status === 'completed') {
+            $completion_date = date('Y-m-d');
+            $points_awarded = 50; // Standard points for a goal
+            
+            // Update Goal
+            $stmt = $pdo->prepare("UPDATE goals SET status = ?, progress = ?, completion_date = ?, points = ? WHERE id = ? AND user_id = ?");
+            $stmt->execute([$new_status, $new_progress, $completion_date, $points_awarded, $id, $user_id]);
+            
+            // Award Points to User
+            $pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$points_awarded, $user_id]);
+            $points_change = $points_awarded;
+            
+        } else {
+            // Revert (Mark as active)
+            $points_to_deduct = $goal['points']; // Deduct points previously awarded
+            
+            $stmt = $pdo->prepare("UPDATE goals SET status = ?, progress = ?, completion_date = NULL, points = 0 WHERE id = ? AND user_id = ?");
+            $stmt->execute([$new_status, $new_progress, $id, $user_id]);
+            
+            // Deduct Points from User
+            $pdo->prepare("UPDATE users SET points = GREATEST(0, points - ?) WHERE id = ?")->execute([$points_to_deduct, $user_id]);
+            $points_change = -$points_to_deduct;
+        }
+        
+        echo json_encode(['success' => true, 'points_change' => $points_change]);
         exit;
     }
 }
@@ -58,6 +97,11 @@ foreach ($goals as $g) {
     if ($g['status'] === 'active') $activeCount++;
     else $completedCount++;
 }
+
+// Get User Points
+$stmt = $pdo->prepare("SELECT points FROM users WHERE id = ?");
+$stmt->execute([$user_id]);
+$userPoints = $stmt->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -103,6 +147,23 @@ foreach ($goals as $g) {
         }
         .toggle-btn:hover { background: rgba(0,0,0,0.1); }
         .toggle-btn.is-completed { background: var(--success); color: white; border-color: var(--success); }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(4px);
+            z-index: 1000; display: none; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .modal-overlay.open { display: flex; opacity: 1; }
+        .modal-content {
+            background: white; width: 90%; max-width: 450px;
+            border-radius: 24px; padding: 30px; 
+            transform: translateY(20px); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            text-align: center;
+        }
+        .modal-overlay.open .modal-content { transform: translateY(0); }
     </style>
 </head>
 <body>
@@ -115,8 +176,22 @@ foreach ($goals as $g) {
                     <h1>Goals & Ambitions 🎯</h1>
                     <p style="color: #444; font-weight: 500;">Design your future, one milestone at a time.</p>
                 </div>
-                <button class="btn btn-primary" onclick="openModal()">+ New Goal</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="showMotivation()" style="background: linear-gradient(135deg, #FF9966, #FF5E62); color: white; border: none;">🚀 Boost Me</button>
+                    <button class="btn btn-primary" onclick="openModal()">+ New Goal</button>
+                </div>
             </header>
+
+            <!-- Points Banner -->
+            <div style="background: linear-gradient(135deg, #6C5DD3, #4E3CC3); padding: 20px; border-radius: 15px; color: white; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 20px rgba(108, 93, 211, 0.3);">
+                <div>
+                    <h2 style="margin: 0; font-size: 2.5rem;"><?php echo number_format($userPoints); ?> ✨</h2>
+                    <span style="opacity: 0.8; font-weight: 600;">LIFETIME POINTS EARNED</span>
+                </div>
+                <div>
+                    <a href="goals_report.php" style="background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 10px; color: white; text-decoration: none; font-weight: 700; transition: background 0.2s;">View Analytics &rarr;</a>
+                </div>
+            </div>
 
             <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-bottom: 30px;">
                 <div class="glass-card" style="padding: 20px; text-align: center; border: 1px solid var(--glass-border);">
@@ -194,6 +269,8 @@ foreach ($goals as $g) {
                         <label>Target Date</label>
                         <input type="date" name="target_date" class="form-input">
                     </div>
+
+
                     <div class="form-group">
                         <label>Category</label>
                         <select name="category" class="form-input">
@@ -212,10 +289,46 @@ foreach ($goals as $g) {
         </div>
     </div>
 
+    <!-- Motivation Modal -->
+    <div class="modal-overlay" id="motivationModal">
+        <div class="modal-content">
+            <div style="font-size: 3rem; margin-bottom: 15px;">💡</div>
+            <h3 style="color: #1f2937; margin-bottom: 15px; font-size: 1.5rem;">Daily Fuel</h3>
+            <p id="quoteText" style="font-size: 1.1rem; line-height: 1.6; color: #4b5563; font-weight: 500; font-style: italic; margin-bottom: 25px;">
+                <!-- Quote goes here -->
+            </p>
+            <button onclick="closeMotivation()" class="btn btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">Let's Do This!</button>
+        </div>
+    </div>
+
     <script>
         function openModal() { document.getElementById('goalModal').classList.add('active'); }
         function closeModal() { document.getElementById('goalModal').classList.remove('active'); }
         
+        // Motivation Modal Logic
+        function showMotivation() {
+            const quote = "<?php echo addslashes($randomQuote); ?>";
+            document.getElementById('quoteText').textContent = quote;
+            
+            const el = document.getElementById('motivationModal');
+            el.style.display = 'flex';
+            setTimeout(() => el.classList.add('open'), 10);
+        }
+
+        function closeMotivation() {
+            const el = document.getElementById('motivationModal');
+            el.classList.remove('open');
+            setTimeout(() => el.style.display = 'none', 300);
+        }
+
+        // Close on Outside Click
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.classList.remove('open');
+                setTimeout(() => event.target.style.display = 'none', 300);
+            }
+        }
+
         async function toggleStatus(goalId) {
             const formData = new FormData();
             formData.append('action', 'toggle_status');
@@ -223,7 +336,11 @@ foreach ($goals as $g) {
 
             try {
                 const response = await fetch('goals.php', { method: 'POST', body: formData });
-                if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    if(data.points_change > 0) {
+                        alert("🎉 Goal Completed! +" + data.points_change + " points!");
+                    }
                     location.reload(); 
                 }
             } catch (err) { console.error(err); }

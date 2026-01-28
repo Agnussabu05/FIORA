@@ -20,7 +20,6 @@ $sql = "SELECT
             (SELECT MAX(log_date) FROM mood_logs ml WHERE ml.user_id = u.id) as last_log
         FROM users u 
         WHERE u.role != 'admin'
-        HAVING total_logs > 0
         ORDER BY last_log DESC";
 $stmt = $pdo->query($sql);
 $users = $stmt->fetchAll();
@@ -101,16 +100,18 @@ $users = $stmt->fetchAll();
                             <td><?php echo $u['total_logs']; ?></td>
                             <td>
                                 <?php 
-                                    $bg = '#eee'; $col = '#333';
-                                    if($u['avg_mood'] >= 4) { $bg = '#dcfce7'; $col='#16a34a'; }
-                                    elseif($u['avg_mood'] >= 2.5) { $bg = '#dbeafe'; $col='#2563eb'; }
-                                    else { $bg = '#fee2e2'; $col='#ef4444'; }
+                                    if ($u['total_logs'] == 0) {
+                                        echo '<span class="badge" style="background: #f3f4f6; color: #6b7280;">N/A</span>';
+                                    } else {
+                                        $bg = '#eee'; $col = '#333';
+                                        if($u['avg_mood'] >= 4) { $bg = '#dcfce7'; $col='#16a34a'; }
+                                        elseif($u['avg_mood'] >= 2.5) { $bg = '#dbeafe'; $col='#2563eb'; }
+                                        else { $bg = '#fee2e2'; $col='#ef4444'; }
+                                        echo '<span class="badge" style="background: '.$bg.'; color: '.$col.';">'.$u['avg_mood'].'/5</span>';
+                                    }
                                 ?>
-                                <span class="badge" style="background: <?php echo $bg; ?>; color: <?php echo $col; ?>;">
-                                    <?php echo $u['avg_mood']; ?>/5
-                                </span>
                             </td>
-                            <td><?php echo date('M d, Y', strtotime($u['last_log'])); ?></td>
+                            <td><?php echo $u['last_log'] ? date('M d, Y', strtotime($u['last_log'])) : 'Never'; ?></td>
                             <td>
                                 <a href="mood_report_view.php?user_id=<?php echo $u['id']; ?>" class="btn-small" style="color: var(--primary); text-decoration: none; font-weight: 600;">View Report &rarr;</a>
                             </td>

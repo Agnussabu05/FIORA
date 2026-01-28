@@ -16,13 +16,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$pdo) {
             $error = "Database unavailable. Please try again later.";
         } else {
-            // Find user
-            $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? OR email = ?");
-            $stmt->execute([$identifier, $identifier]);
-            $user = $stmt->fetch();
+            // Email Validation
+            if (strpos($identifier, '@') !== false && !filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+                $error = "Invalid email format.";
+            } else {
+                // Find user
+                $stmt = $pdo->prepare("SELECT id, email FROM users WHERE username = ? OR email = ?");
+                $stmt->execute([$identifier, $identifier]);
+                $user = $stmt->fetch();
+
+                if (!$user) {
+                    $error = "User not found with that username or email.";
+                }
+            }
         }
 
-        if ($user) {
+        if ($user && empty($error)) {
             // Generate secure token
             $token = bin2hex(random_bytes(32));
             $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
@@ -121,11 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         body {
-            background: linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
-                        url('https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?q=80&w=2572&auto=format&fit=crop');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
             min-height: 100vh;
             margin: 0;
             display: flex;

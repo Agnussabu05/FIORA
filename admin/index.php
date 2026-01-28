@@ -277,82 +277,118 @@ $tab = $_GET['tab'] ?? 'dashboard';
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Variables for the new theme */
+        :root {
+            --glass-card-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.9);
+            --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); /* Softer, deeper shadow */
+            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+            --text-heading: #1e293b;
+            --text-body: #64748b;
+        }
+
+        body {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%); /* Lighter, fresher background */
+        }
+
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 24px;
             margin-bottom: 32px;
         }
+
         .stat-card {
-            background: rgba(255, 255, 255, 0.6); /* Slightly more opaque for better contrast */
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            padding: 24px;
-            border-radius: 20px;
+            background: var(--glass-card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: var(--glass-border);
+            padding: 28px;
+            border-radius: 24px;
             display: flex;
             align-items: center;
-            gap: 20px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            gap: 24px;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy hover */
             animation: fadeInUp 0.6s ease-out forwards;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); /* Soft shadow */
+            box-shadow: var(--glass-shadow);
+            position: relative;
+            overflow: hidden;
         }
+        
+        /* Subtle glow effect on hover */
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
         .stat-card:hover {
-            transform: translateY(-5px) scale(1.02);
-            background: rgba(255, 255, 255, 0.8);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transform: translateY(-8px) scale(1.01);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+            border-color: #fff;
         }
+        .stat-card:hover::before { opacity: 1; }
+
         .stat-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 16px;
+            width: 64px;
+            height: 64px;
+            border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.8rem;
-            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); /* Subtle metallic gradient default */
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.06);
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
         }
+
         .stat-info h3 {
             margin: 0;
-            font-size: 1.8rem;
-            font-weight: 800; /* Bolder */
-            background: linear-gradient(45deg, #2d3748, #4a5568);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 2rem; /* Larger numbers */
+            font-weight: 800; 
+            color: var(--text-heading);
+            letter-spacing: -0.5px;
+            line-height: 1.1;
         }
         .stat-info p {
-            margin: 4px 0 0;
-            color: #718096;
+            margin: 6px 0 0;
+            color: var(--text-body);
             font-size: 0.85rem;
-            font-weight: 500;
-            letter-spacing: 0.5px;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         /* Charts Section */
         .charts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); /* Wider charts */
+            gap: 30px;
+            margin-bottom: 40px;
         }
         .chart-card {
-            background: rgba(255, 255, 255, 0.6);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            padding: 24px;
-            border-radius: 20px;
-            animation: fadeInUp 0.6s ease-out forwards 0.2s; /* Delayed animation */
-            transition: transform 0.3s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            padding: 30px;
+            border-radius: 28px;
+            animation: fadeInUp 0.7s ease-out forwards 0.2s;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.04);
         }
         .chart-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 15px rgba(0,0,0,0.08);
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+            background: rgba(255, 255, 255, 0.9);
         }
         .chart-container {
             position: relative;
-            height: 250px; /* Slightly taller */
+            height: 280px;
             width: 100%;
         }
         .chart-header {
@@ -360,21 +396,24 @@ $tab = $_GET['tab'] ?? 'dashboard';
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid rgba(0,0,0,0.03);
+            padding-bottom: 15px;
         }
         .chart-header h3 {
             margin: 0;
-            font-size: 1.2rem;
-            color: #2d3748;
+            font-size: 1.25rem;
+            color: var(--text-heading);
             font-weight: 700;
         }
-        /* Icon Gradients */
-        .icon-blue { background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%); color: #fff; }
-        .icon-orange { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); color: #fff; }
-        .icon-green { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); color: #fff; } /* actually tealish */
-        .icon-pink { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); color: #fff; }
-        .icon-purple { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); color: #fff; }
-        .icon-gold { background: linear-gradient(135deg, #fccb90 0%, #d57eeb 100%); color: #fff; }
-        .icon-cyan { background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); color: #fff; }
+        
+        /* Icon Gradients (Vibrant) */
+        .icon-blue { background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%); color: #fff; }
+        .icon-orange { background: linear-gradient(135deg, #fb923c 0%, #f97316 100%); color: #fff; }
+        .icon-green { background: linear-gradient(135deg, #34d399 0%, #10b981 100%); color: #fff; }
+        .icon-pink { background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%); color: #fff; }
+        .icon-purple { background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); color: #fff; }
+        .icon-gold { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #fff; }
+        .icon-cyan { background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%); color: #fff; }
 
         .personnel-list {
             display: none;
@@ -387,6 +426,19 @@ $tab = $_GET['tab'] ?? 'dashboard';
             opacity: 1;
             transform: translateY(0);
         }
+
+        /* Improved Table Styles */
+        tr { transition: background 0.15s; }
+        tr:hover { background: rgba(248, 250, 252, 0.8) !important; }
+        td, th { vertical-align: middle; }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: 24px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+        }
     </style>
 </head>
 <body>
@@ -394,12 +446,12 @@ $tab = $_GET['tab'] ?? 'dashboard';
         <?php include 'sidebar.php'; ?>
         
         <main class="main-content">
-            <header class="top-bar">
+            <header class="top-bar" style="margin-bottom: 30px;">
                 <div class="welcome-section">
-                    <h1 style="background: linear-gradient(to right, #222, #555); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                    <h1 style="color: #1e293b; font-size: 2.2rem; letter-spacing: -1px; margin-bottom: 5px;">
                         <?php echo $tab == 'study' ? 'Group Study Management' : 'Admin Dashboard'; ?>
                     </h1>
-                    <p><?php echo $tab == 'study' ? 'Review and verify pending group study requests.' : 'System health overview & user statistics.'; ?></p>
+                    <p style="font-size: 1rem; color: #64748b; margin: 0;"><?php echo $tab == 'study' ? 'Review and verify pending group study requests.' : 'System health overview & user statistics.'; ?></p>
                 </div>
             </header>
 
