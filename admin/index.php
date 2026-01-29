@@ -139,31 +139,7 @@ try {
     }
     $charts['mood'] = $mood_data;
 
-    // --- Users Report Logic (Consolidated) ---
-    $search = $_GET['search'] ?? '';
-    $params = [];
-    $user_query = "
-        SELECT 
-            u.id, 
-            u.username, 
-            u.role, 
-            u.created_at,
-            COUNT(t.id) as total_tasks,
-            SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed_tasks
-        FROM users u
-        LEFT JOIN tasks t ON u.id = t.user_id
-        WHERE u.username != 'demo'
-    ";
-    if ($search) {
-        $user_query .= " AND u.username LIKE ?";
-        $params[] = "%$search%";
-    }
-    $user_query .= " GROUP BY u.id, u.username, u.role, u.created_at";
-    $user_query .= " ORDER BY u.created_at DESC";
-    
-    $stmt = $pdo->prepare($user_query);
-    $stmt->execute($params);
-    $users_report = $stmt->fetchAll();
+
 
     // --- Study Group Verification Logic ---
     if (isset($_POST['verify_group'])) {
@@ -599,59 +575,8 @@ $tab = $_GET['tab'] ?? 'dashboard';
                     </div>
                 </div>
 
-                <!-- User Report Section -->
-                <div class="glass-card" style="margin-bottom: 40px; overflow-x: auto;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3>User Reports</h3>
-                        <form method="GET" style="display: flex; gap: 10px;">
-                            <input type="text" name="search" placeholder="Search users..." value="<?php echo htmlspecialchars($search); ?>" 
-                                   style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1); background: rgba(255,255,255,0.2);">
-                            <button type="submit" class="btn btn-primary" style="padding: 8px 16px;">Search</button>
-                        </form>
-                    </div>
-                    
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.1);">
-                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">User</th>
-                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Role</th>
-                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Progress</th>
-                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Joined</th>
-                                <th style="text-align: left; padding: 12px; color: var(--text-muted);">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($users_report as $u): 
-                                $total = $u['total_tasks'] ?: 0;
-                                $completed = $u['completed_tasks'] ?: 0;
-                                $percent = $total > 0 ? round(($completed / $total) * 100) : 0;
-                            ?>
-                            <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
-                                <td style="padding: 12px; font-weight: 500;">
-                                    <?php echo htmlspecialchars($u['username']); ?>
-                                </td>
-                                <td style="padding: 12px;">
-                                    <span style="background: <?php echo $u['role'] === 'admin' ? 'rgba(79, 70, 229, 0.1)' : 'rgba(16, 185, 129, 0.1)'; ?>; 
-                                                 color: <?php echo $u['role'] === 'admin' ? '#4F46E5' : '#10B981'; ?>; 
-                                                 padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
-                                        <?php echo ucfirst($u['role'] ?? 'user'); ?>
-                                    </span>
-                                </td>
-                                <td style="padding: 12px; width: 200px;">
-                                    <div style="background: rgba(0,0,0,0.1); border-radius: 10px; height: 8px; width: 100%; overflow: hidden;">
-                                        <div style="background: #4facfe; height: 100%; width: <?php echo $percent; ?>%;"></div>
-                                    </div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;"><?php echo $percent; ?>%</div>
-                                </td>
-                                <td style="padding: 12px; color: var(--text-muted);"><?php echo date('M j, Y', strtotime($u['created_at'])); ?></td>
-                                <td style="padding: 12px;">
-                                    <a href="user_details.php?id=<?php echo $u['id']; ?>" class="btn btn-primary" style="text-decoration: none; padding: 6px 12px; font-size: 0.85rem; border-radius: 8px;">View Details</a>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+
+
                 <?php endif; ?>
 
                 <!-- Study Group Verification Section (Show always if tab is study, or at bottom otherwise) -->

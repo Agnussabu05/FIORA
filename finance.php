@@ -143,6 +143,11 @@ if ($tab === 'shared') {
         ");
         $geStmt->execute([$activeGroupId]);
         $groupExpenses = $geStmt->fetchAll();
+
+        // Fetch Members
+        $gmStmt = $pdo->prepare("SELECT u.username FROM finance_group_members gm JOIN users u ON gm.user_id = u.id WHERE gm.group_id = ?");
+        $gmStmt->execute([$activeGroupId]);
+        $groupMembers = $gmStmt->fetchAll(PDO::FETCH_COLUMN);
     }
 }
 
@@ -227,10 +232,16 @@ if ($tab === 'bills') {
                         <h2 style="margin: 0;">Personal Dashboard</h2>
                         <span style="color: var(--text-muted);">Tracking for <?php echo $currentMonthName; ?></span>
                     </div>
-                    <button class="btn btn-primary" onclick="document.getElementById('txModal').classList.add('active')" 
-                            style="padding: 12px 25px; border-radius: 15px; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); display: flex; align-items: center; gap: 8px; transition: transform 0.2s;">
-                        <span style="font-size: 1.2rem;">+</span> Add Transaction
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" onclick="document.getElementById('activityModal').classList.add('active')" 
+                                style="padding: 12px 20px; border-radius: 15px; font-weight: 700; background: white; border: 1px solid var(--glass-border); color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+                            📜 History
+                        </button>
+                        <button class="btn btn-primary" onclick="document.getElementById('txModal').classList.add('active')" 
+                                style="padding: 12px 25px; border-radius: 15px; font-weight: 800; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); display: flex; align-items: center; gap: 8px; transition: transform 0.2s;">
+                            <span style="font-size: 1.2rem;">+</span> Add Transaction
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px;">
@@ -280,21 +291,7 @@ if ($tab === 'bills') {
                     </div>
                 </div>
 
-                <!-- Transaction List -->
-                <div class="glass-card">
-                    <h3>Recent Activity</h3>
-                    <?php foreach($transactions as $tx): ?>
-                        <div class="tx-item">
-                            <div>
-                                <strong><?php echo htmlspecialchars($tx['category']); ?></strong>
-                                <small style="display:block; color:#666;"><?php echo $tx['transaction_date']; ?> • <?php echo htmlspecialchars($tx['description']); ?></small>
-                            </div>
-                            <span style="font-weight:bold; color: <?php echo $tx['type'] == 'income' ? 'var(--success)' : 'var(--danger)'; ?>">
-                                <?php echo $tx['type'] == 'income' ? '+' : '-'; ?>₹<?php echo number_format($tx['amount']); ?>
-                            </span>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
+                <!-- Transaction List Trigger Removed (Moved to Header) -->
 
             <?php elseif ($tab === 'shared'): ?>
                 <!-- SHARED EXPENSES CONTENT -->
@@ -330,7 +327,12 @@ if ($tab === 'bills') {
                         <?php if($activeGroupId): ?>
                             <div style="background: white; padding: 20px; border-radius: 15px; border: 1px solid var(--glass-border);">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                    <h3>Expenses</h3>
+                                    <div>
+                                        <h3 style="margin: 0;">Expenses</h3>
+                                        <button onclick="document.getElementById('membersModal').classList.add('active')" style="background: #000; border: none; padding: 6px 12px; color: white; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-weight: 600; margin-top: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                                            👥 View Members
+                                        </button>
+                                    </div>
                                     <button class="btn btn-primary" onclick="document.getElementById('addSharedModal').classList.add('active')">+ Add Expense</button>
                                 </div>
                                 
@@ -396,6 +398,60 @@ if ($tab === 'bills') {
     </div>
 
     <!-- MODALS for Groups, Bills, etc. would go here (simplified for this update) -->
+    
+    <!-- Recent Activity Modal -->
+    <div class="modal" id="activityModal" onclick="if(event.target==this)this.classList.remove('active')">
+        <div class="glass-card" style="width: 500px; padding: 30px; max-height: 80vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0;">Recent Activity</h3>
+                <button onclick="document.getElementById('activityModal').classList.remove('active')" style="background:none; border:none; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <?php if(empty($transactions)): ?>
+                <div style="text-align: center; color: #999; padding: 20px;">No transactions found for this period.</div>
+            <?php else: ?>
+                <?php foreach($transactions as $tx): ?>
+                    <div class="tx-item" style="border-bottom: 1px solid #eee; padding: 12px 0; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                             <div style="font-weight: 700; color: #333;"><?php echo htmlspecialchars($tx['category']); ?></div>
+                             <div style="font-size: 0.85rem; color: #666;">
+                                <?php echo date('M d', strtotime($tx['transaction_date'])); ?> • <?php echo htmlspecialchars($tx['description']); ?>
+                             </div>
+                        </div>
+                        <div style="font-weight:bold; font-family: 'JetBrains Mono', monospace; color: <?php echo $tx['type'] == 'income' ? '#10b981' : '#ef4444'; ?>">
+                            <?php echo $tx['type'] == 'income' ? '+' : '-'; ?>₹<?php echo number_format($tx['amount']); ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    </div>
+    
+    <!-- Group Members Modal -->
+    <div class="modal" id="membersModal" onclick="if(event.target==this)this.classList.remove('active')">
+        <div class="glass-card" style="width: 350px; padding: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0;">Group Members</h3>
+                <button onclick="document.getElementById('membersModal').classList.remove('active')" style="background:none; border:none; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <?php if(!empty($groupMembers)): ?>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <?php foreach($groupMembers as $member): ?>
+                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: #f8fafc; border-radius: 8px;">
+                            <div style="width: 30px; height: 30px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #64748b;">
+                                <?php echo strtoupper(substr($member, 0, 1)); ?>
+                            </div>
+                            <span style="font-weight: 600; color: #334155;"><?php echo htmlspecialchars($member); ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div style="text-align: center; color: #94a3b8;">No members info available.</div>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <!-- Create Group Modal -->
     <div class="modal" id="createGroupModal" onclick="if(event.target==this)this.classList.remove('active')">
         <div class="glass-card" style="width: 400px; padding: 30px;">
@@ -505,14 +561,90 @@ if ($tab === 'bills') {
     <div class="modal" id="addBillModal" onclick="if(event.target==this)this.classList.remove('active')">
         <div class="glass-card" style="width: 400px; padding: 30px;">
             <h3>Add Recurring Bill</h3>
-            <form method="POST">
+            <form method="POST" id="addBillForm" novalidate onsubmit="return validateBillForm()">
                 <input type="hidden" name="action" value="add_bill">
-                <input type="text" name="title" placeholder="Bill Name (e.g. Netflix)" class="form-input" required style="width: 100%; margin-bottom: 10px;">
-                <input type="number" name="amount" placeholder="Amount" class="form-input" required style="width: 100%; margin-bottom: 10px;">
-                <input type="number" name="due_day" placeholder="Day of Month (1-31)" min="1" max="31" class="form-input" required style="width: 100%; margin-bottom: 10px;">
-                <input type="text" name="category" placeholder="Category" class="form-input" required style="width: 100%; margin-bottom: 10px;">
+                <div style="margin-bottom: 10px;">
+                    <input type="text" name="title" id="billTitle" placeholder="Bill Name (e.g. Netflix)" class="form-input" style="width: 100%;">
+                    <span class="error-msg" id="error-title" style="color: #ef4444; font-size: 0.8rem; display: none;">⚠️ Please enter a bill name</span>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <input type="number" name="amount" id="billAmount" placeholder="Amount" class="form-input" style="width: 100%;">
+                    <span class="error-msg" id="error-amount" style="color: #ef4444; font-size: 0.8rem; display: none;">⚠️ Please enter an amount</span>
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <input type="number" name="due_day" id="billDay" placeholder="Day of Month (1-31)" min="1" max="31" class="form-input" style="width: 100%;">
+                    <span class="error-msg" id="error-day" style="color: #ef4444; font-size: 0.8rem; display: none;">⚠️ Please enter a valid day (1-31)</span>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <select name="category" id="billCategory" class="form-input" style="width: 100%;">
+                        <option value="" disabled selected>Select Category</option>
+                        <option value="Utilities">💡 Utilities</option>
+                        <option value="Subscription">📺 Subscription</option>
+                        <option value="Rent">🏠 Rent</option>
+                        <option value="Internet">🌐 Internet</option>
+                        <option value="Insurance">🛡️ Insurance</option>
+                        <option value="Education">🎓 Education</option>
+                        <option value="Other">🔹 Other</option>
+                    </select>
+                    <span class="error-msg" id="error-category" style="color: #ef4444; font-size: 0.8rem; display: none;">⚠️ Please select a category</span>
+                </div>
+                
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Add Reminder</button>
             </form>
+            <script>
+                function validateBillForm() {
+                    let isValid = true;
+                    
+                    // Title
+                    const title = document.getElementById('billTitle');
+                    if(title.value.trim() === '') {
+                        document.getElementById('error-title').style.display = 'block';
+                        title.style.borderColor = '#ef4444';
+                        isValid = false;
+                    } else {
+                        document.getElementById('error-title').style.display = 'none';
+                        title.style.borderColor = ''; // reset
+                    }
+
+                    // Amount
+                    const amount = document.getElementById('billAmount');
+                    if(amount.value.trim() === '') {
+                        document.getElementById('error-amount').style.display = 'block';
+                        amount.style.borderColor = '#ef4444';
+                        isValid = false;
+                    } else {
+                        document.getElementById('error-amount').style.display = 'none';
+                        amount.style.borderColor = '';
+                    }
+
+                    // Day
+                    const day = document.getElementById('billDay');
+                    if(day.value.trim() === '' || day.value < 1 || day.value > 31) {
+                        document.getElementById('error-day').style.display = 'block';
+                        day.style.borderColor = '#ef4444';
+                        isValid = false;
+                    } else {
+                        document.getElementById('error-day').style.display = 'none';
+                        day.style.borderColor = '';
+                    }
+
+                    // Category
+                    const cat = document.getElementById('billCategory');
+                    if(cat.value === '') {
+                        document.getElementById('error-category').style.display = 'block';
+                        cat.style.borderColor = '#ef4444';
+                        isValid = false;
+                    } else {
+                        document.getElementById('error-category').style.display = 'none';
+                        cat.style.borderColor = '';
+                    }
+
+                    return isValid;
+                }
+            </script>
         </div>
     </div>
 

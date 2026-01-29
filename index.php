@@ -114,6 +114,11 @@ $user_habits = $stmt->fetchAll();
                     </div>
                     
                     <button class="btn btn-primary" onclick="alert('Quick add feature coming soon!')">+ Quick Add</button>
+                    
+                    <!-- Profile Button (Requested) -->
+                    <a href="profile.php" class="btn" style="background: white; border: 1px solid #e2e8f0; color: var(--text-main); text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                        <span>👤</span> Profile
+                    </a>
                 </div>
             </header>
 

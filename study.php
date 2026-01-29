@@ -103,8 +103,8 @@ if (isset($_POST['send_request'])) {
 
         // 1. Create the Group
         $description = $_POST['group_desc'] ?? '';
-        $stmt = $pdo->prepare("INSERT INTO study_groups (name, subject, description, status) VALUES (?, ?, ?, 'forming')");
-        $stmt->execute([$group_name, $subject_name, $description]);
+        $stmt = $pdo->prepare("INSERT INTO study_groups (name, subject, description, status, leader_id) VALUES (?, ?, ?, 'forming', ?)");
+        $stmt->execute([$group_name, $subject_name, $description, $user_id]);
         $group_id = $pdo->lastInsertId();
         
         // 2. Add leader
@@ -315,7 +315,7 @@ $discover_stmt = $pdo->prepare("
     (SELECT 1 FROM study_group_members WHERE group_id = sg.id AND user_id = ? LIMIT 1) as is_member,
     (SELECT 1 FROM study_requests WHERE group_id = sg.id AND (sender_id = ? OR receiver_id = ?) AND status = 'pending' LIMIT 1) as is_pending
     FROM study_groups sg 
-    WHERE sg.status IN ('forming', 'active') 
+    WHERE sg.status IN ('forming', 'active', 'pending_verification') 
     ORDER BY sg.created_at DESC
 ");
 $discover_stmt->execute([$user_id, $user_id, $user_id]);
@@ -902,8 +902,12 @@ $discover_groups = $discover_stmt->fetchAll();
                                 <?php if ($discover_groups): foreach($discover_groups as $dg): ?>
                                     <div class="discover-card">
                                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                                            <span class="badge <?php echo $dg['status']=='active'?'badge-active':'badge-forming'; ?>">
-                                                <?php echo ucfirst($dg['status']); ?>
+                                            <span class="badge <?php 
+                                                if($dg['status']=='active') echo 'badge-active';
+                                                elseif($dg['status']=='pending_verification') echo 'badge-pending';
+                                                else echo 'badge-forming'; 
+                                            ?>">
+                                                <?php echo ($dg['status'] == 'pending_verification') ? 'Pending' : ucfirst($dg['status']); ?>
                                             </span>
                                             <span style="font-size: 0.8rem; color: #64748b;">👥 <?php echo $dg['member_count']; ?></span>
                                         </div>
@@ -939,13 +943,10 @@ $discover_groups = $discover_stmt->fetchAll();
                                             <?php endif; ?>
                                         </div>
 
-                                        <!-- Show Members (Toggle) - Moved to bottom -->
+                                        <!-- Show Members (Always Visible) -->
                                         <div style="margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
-                                            <button type="button" onclick="const list = this.nextElementSibling; if(list.style.display==='none'){list.style.display='block';this.innerText='Hide Squad 🔼';}else{list.style.display='none';this.innerText='👥 See Squad';}" 
-                                                    style="width: 100%; background: none; border: none; color: #64748b; font-size: 0.75rem; font-weight: 600; cursor: pointer; text-align: left; padding: 0;">
-                                                👥 See Squad
-                                            </button>
-                                            <div style="display: none; font-size: 0.75rem; color: #475569; padding-top: 6px; line-height: 1.4;">
+                                            <div style="font-size: 0.75rem; color: #64748b; font-weight: 600; margin-bottom: 4px;">👥 Squad Members:</div>
+                                            <div style="font-size: 0.75rem; color: #475569; line-height: 1.4;">
                                                 <?php echo htmlspecialchars($dg['public_members']); ?>
                                             </div>
                                         </div>

@@ -30,6 +30,13 @@ if (!$group || empty($group['my_role'])) {
     }
 }
 
+// Strict Access Control: Only ACTIVE groups can be accessed
+if ($group['status'] !== 'active' && $_SESSION['role'] !== 'admin') {
+    $_SESSION['study_msg'] = "🚫 This tribe is not active yet! Forming or Pending Approval.";
+    header("Location: study.php");
+    exit;
+}
+
 // 2. Handle New Message / File Upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_msg'])) {
     $msg = trim($_POST['message']);
