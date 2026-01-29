@@ -168,8 +168,34 @@ if ($tab === 'bills') {
     <title>Fiora - Finance</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Flatpickr Overrides for High Contrast */
+        .flatpickr-calendar {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            border-radius: 16px !important;
+            background: white !important;
+        }
+        .flatpickr-day { color: #1f2937 !important; font-weight: 500; }
+        .flatpickr-day.selected, .flatpickr-day:hover {
+            background: var(--primary) !important;
+            color: #fff !important;
+            border-color: var(--primary) !important;
+        }
+        .flatpickr-current-month, .flatpickr-current-month input.cur-year {
+            color: #111827 !important; font-weight: 700;
+        }
+        .flatpickr-weekday { color: #4b5563 !important; font-weight: 600; }
+        
+        .flatpickr-ok-btn {
+            width: 90%; margin: 10px 5%; padding: 10px;
+            background: var(--primary); color: white;
+            border: none; border-radius: 8px; cursor: pointer; font-weight: 700;
+        }
+        .flatpickr-ok-btn:hover { background: #000; }
+
         .nav-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid var(--glass-border); padding-bottom: 15px; }
         .nav-tab {
             padding: 10px 20px;
@@ -344,7 +370,18 @@ if ($tab === 'bills') {
                                                 Paid by <strong style="color: var(--primary);"><?php echo htmlspecialchars($exp['username']); ?></strong> • <?php echo $exp['expense_date']; ?>
                                             </div>
                                         </div>
-                                        <div style="font-weight: 800; font-size: 1.1rem;">₹<?php echo number_format($exp['amount'], 2); ?></div>
+                                        <div style="text-align: right;">
+                                            <div style="font-weight: 800; font-size: 1.1rem;">₹<?php echo number_format($exp['amount'], 2); ?></div>
+                                            <?php 
+                                            $memberCount = count($groupMembers);
+                                            if ($memberCount > 0): 
+                                                $split = $exp['amount'] / $memberCount;
+                                            ?>
+                                                <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">
+                                                    Start split: ₹<?php echo number_format($split, 2); ?> / person
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -509,6 +546,8 @@ if ($tab === 'bills') {
                             exp.style.color = '#666';
                             exp.style.border = '1px solid #ddd';
                             exp.style.boxShadow = 'none';
+                            
+                            updateCategories('income');
                         } else {
                             exp.style.background = '#ef4444';
                             exp.style.color = 'white';
@@ -519,24 +558,54 @@ if ($tab === 'bills') {
                             inc.style.color = '#666';
                             inc.style.border = '1px solid #ddd';
                             inc.style.boxShadow = 'none';
+                            
+                            updateCategories('expense');
                         }
                     }
+
+                    function updateCategories(type) {
+                        const select = document.getElementById('tx-category');
+                        select.innerHTML = '<option value="" disabled selected>Select Category</option>';
+                        
+                        const incomeCats = [
+                            {val: 'Salary', label: '💰 Salary'},
+                            {val: 'Freelance', label: '💻 Freelance'},
+                            {val: 'Investments', label: '📈 Investments'},
+                            {val: 'Gifts', label: '🎁 Gifts'},
+                            {val: 'Other', label: '🔹 Other'}
+                        ];
+                        
+                        const expenseCats = [
+                            {val: 'Food', label: '🍔 Food'},
+                            {val: 'Transport', label: '🚗 Transport'},
+                            {val: 'Shopping', label: '🛍️ Shopping'},
+                            {val: 'Bills', label: '💡 Bills'},
+                            {val: 'Entertainment', label: '🎬 Entertainment'},
+                            {val: 'Health', label: '🏥 Health'},
+                            {val: 'Education', label: '📚 Education'},
+                            {val: 'Other', label: '🔹 Other'}
+                        ];
+                        
+                        const fastCats = type === 'income' ? incomeCats : expenseCats;
+                        
+                        fastCats.forEach(cat => {
+                            const opt = document.createElement('option');
+                            opt.value = cat.val;
+                            opt.innerText = cat.label;
+                            select.appendChild(opt);
+                        });
+                    }
+                    
+                    // Initialize with expense (default)
+                    document.addEventListener('DOMContentLoaded', () => updateCategories('expense'));
                 </script>
 
                 <input type="number" name="amount" placeholder="Amount" class="form-input" required style="width: 100%; margin-bottom: 10px;">
                 <input type="text" name="description" placeholder="Description" class="form-input" style="width: 100%; margin-bottom: 10px;">
-                <select name="category" class="form-input" required style="width: 100%; margin-bottom: 10px;">
-                    <option value="" disabled selected>Select Category</option>
-                    <option value="Food">🍔 Food</option>
-                    <option value="Transport">🚗 Transport</option>
-                    <option value="Shopping">🛍️ Shopping</option>
-                    <option value="Bills">💡 Bills</option>
-                    <option value="Entertainment">🎬 Entertainment</option>
-                    <option value="Health">🏥 Health</option>
-                    <option value="Salary">💰 Salary</option>
-                    <option value="Other">🔹 Other</option>
+                <select name="category" id="tx-category" class="form-input" required style="width: 100%; margin-bottom: 10px;">
+                    <!-- Populated by JS -->
                 </select>
-                <input type="date" name="date" value="<?php echo date('Y-m-d'); ?>" class="form-input" required style="width: 100%; margin-bottom: 10px;">
+                <input type="text" name="date" value="<?php echo date('Y-m-d'); ?>" class="form-input flatpickr-input" required style="width: 100%; margin-bottom: 10px;" placeholder="Select Date">
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Save</button>
             </form>
         </div>
@@ -551,7 +620,7 @@ if ($tab === 'bills') {
                 <input type="hidden" name="group_id" value="<?php echo $activeGroupId; ?>">
                 <input type="number" name="amount" placeholder="Amount" class="form-input" required style="width: 100%; margin-bottom: 10px;">
                 <input type="text" name="description" placeholder="What for?" class="form-input" required style="width: 100%; margin-bottom: 10px;">
-                <input type="date" name="date" value="<?php echo date('Y-m-d'); ?>" class="form-input" required style="width: 100%; margin-bottom: 10px;">
+                <input type="text" name="date" value="<?php echo date('Y-m-d'); ?>" class="form-input flatpickr-input" required style="width: 100%; margin-bottom: 10px;" placeholder="Select Date">
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Add to Group</button>
             </form>
         </div>
@@ -695,7 +764,14 @@ if ($tab === 'bills') {
                     { label: 'Expense', data: <?php echo json_encode(array_values($expSeries)); ?>, backgroundColor: '#ef4444', borderRadius: 4 }
                 ]
             },
-            options: { responsive: true, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            options: { 
+                responsive: true, 
+                scales: { 
+                    x: { display: true, grid: { display: false } }, 
+                    y: { display: true, beginAtZero: true, border: { display: false } } 
+                }, 
+                plugins: { legend: { display: true, position: 'bottom' } } 
+            }
         });
 
         const catCtx = document.getElementById('categoryChart').getContext('2d');
@@ -712,4 +788,25 @@ if ($tab === 'bills') {
             options: { cutout: '70%', plugins: { legend: { position: 'right' } } }
         });
         <?php endif; ?>
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            flatpickr(".flatpickr-input", {
+                enableTime: false,
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "F j, Y",
+                onReady: function(selectedDates, dateStr, instance) {
+                    const btn = document.createElement("button");
+                    btn.type = "button"; 
+                    btn.innerText = "OK";
+                    btn.className = "flatpickr-ok-btn";
+                    btn.onclick = function() {
+                        instance.close();
+                    };
+                    instance.calendarContainer.appendChild(btn);
+                }
+            });
+        });
     </script>

@@ -27,10 +27,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = $_POST['title'];
         $desc = $_POST['description'];
         $target = $_POST['target_date'];
+        
+        if ($target < date('Y-m-d')) {
+            echo "<script>alert('❌ You cannot set a goal in the past! Please choose a future date.'); window.location.href='goals.php';</script>";
+            exit;
+        }
+
         $cat = $_POST['category'];
         
         $stmt = $pdo->prepare("INSERT INTO goals (user_id, title, description, target_date, category) VALUES (?, ?, ?, ?, ?)");
         $stmt->execute([$user_id, $title, $desc, $target, $cat]);
+        header("Location: goals.php");
+        exit;
+    }
+    
+    if ($action === 'edit') {
+        $id = $_POST['goal_id'];
+        $title = $_POST['title'];
+        $desc = $_POST['description'];
+        $target = $_POST['target_date'];
+        $cat = $_POST['category'];
+        
+        $stmt = $pdo->prepare("UPDATE goals SET title = ?, description = ?, target_date = ?, category = ? WHERE id = ? AND user_id = ?");
+        $stmt->execute([$title, $desc, $target, $cat, $id, $user_id]);
         header("Location: goals.php");
         exit;
     }
@@ -214,6 +233,7 @@ $userPoints = $stmt->fetchColumn();
                                     <?php if ($goal['status'] === 'completed'): ?>
                                         <span style="font-size: 1.2rem;">🏆</span>
                                     <?php endif; ?>
+                                    <button onclick="openEditModal(<?php echo htmlspecialchars(json_encode($goal)); ?>)" style="background: none; border: none; cursor: pointer; font-size: 0.9rem; opacity: 0.7;" title="Edit Goal">✏️</button>
                                     <a href="?delete=<?php echo $goal['id']; ?>" style="text-decoration: none; font-size: 0.9rem; font-weight: 900; color: var(--danger); opacity: 0.6;" onclick="return confirm('Archive this goal?')">✕</a>
                                 </div>
                             </div>
@@ -251,8 +271,8 @@ $userPoints = $stmt->fetchColumn();
     </div>
 
     <!-- Add Goal Modal -->
-    <div class="modal" id="goalModal">
-        <div class="glass-card" style="width: 420px; padding: 30px;">
+    <div class="modal-overlay" id="goalModal">
+        <div class="modal-content" style="width: 420px; padding: 30px;">
             <h3 style="margin-bottom: 25px;">Set New Ambition</h3>
             <form action="goals.php" method="POST">
                 <input type="hidden" name="action" value="add">
@@ -267,7 +287,7 @@ $userPoints = $stmt->fetchColumn();
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div class="form-group">
                         <label>Target Date</label>
-                        <input type="date" name="target_date" class="form-input">
+                        <input type="date" name="target_date" class="form-input" min="<?php echo date('Y-m-d'); ?>" required>
                     </div>
 
 
@@ -289,6 +309,45 @@ $userPoints = $stmt->fetchColumn();
         </div>
     </div>
 
+    <!-- Edit Goal Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-content" style="width: 420px; padding: 30px;">
+            <h3 style="margin-bottom: 25px;">✏️ Edit Goal</h3>
+            <form action="goals.php" method="POST">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" name="goal_id" id="edit_goal_id">
+                <div class="form-group">
+                    <label>What do you want to achieve?</label>
+                    <input type="text" name="title" id="edit_title" class="form-input" required placeholder="Launch Website, Run 10km...">
+                </div>
+                <div class="form-group">
+                    <label>A brief description (Why is this important?)</label>
+                    <textarea name="description" id="edit_description" class="form-input" rows="2" placeholder="To improve my career prospects..."></textarea>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label>Target Date</label>
+                        <input type="date" name="target_date" id="edit_target_date" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select name="category" id="edit_category" class="form-input">
+                            <option value="Personal">Personal</option>
+                            <option value="Career">Career</option>
+                            <option value="Health">Health</option>
+                            <option value="Finance">Finance</option>
+                            <option value="education">Education</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()" style="color: #000 !important; font-weight: 800;">Cancel</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 10px 25px;">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Motivation Modal -->
     <div class="modal-overlay" id="motivationModal">
         <div class="modal-content">
@@ -302,8 +361,34 @@ $userPoints = $stmt->fetchColumn();
     </div>
 
     <script>
-        function openModal() { document.getElementById('goalModal').classList.add('active'); }
-        function closeModal() { document.getElementById('goalModal').classList.remove('active'); }
+        function openModal() { 
+            const el = document.getElementById('goalModal');
+            el.style.display = 'flex';
+            setTimeout(() => el.classList.add('open'), 10);
+        }
+        function closeModal() { 
+            const el = document.getElementById('goalModal');
+            el.classList.remove('open');
+            setTimeout(() => el.style.display = 'none', 300);
+        }
+        
+        function openEditModal(goal) {
+            document.getElementById('edit_goal_id').value = goal.id;
+            document.getElementById('edit_title').value = goal.title;
+            document.getElementById('edit_description').value = goal.description || '';
+            document.getElementById('edit_target_date').value = goal.target_date || '';
+            document.getElementById('edit_category').value = goal.category || 'Personal';
+            
+            const el = document.getElementById('editModal');
+            el.style.display = 'flex';
+            setTimeout(() => el.classList.add('open'), 10);
+        }
+        
+        function closeEditModal() {
+            const el = document.getElementById('editModal');
+            el.classList.remove('open');
+            setTimeout(() => el.style.display = 'none', 300);
+        }
         
         // Motivation Modal Logic
         function showMotivation() {

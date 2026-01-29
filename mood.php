@@ -319,26 +319,71 @@ foreach ($allGratitudeLogs as $entry) {
 
                 </div>
                     
-                    <!-- 2. Mood Companion -->
-                     <div class="mood-card" style="border-top: 4px solid var(--primary-color);">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <div style="background: #e0e7ff; color: var(--primary-color); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🟣</div>
-                            <h3 style="font-weight: 800; color: var(--text-dark); margin: 0;">Mood Companion</h3>
-                        </div>
-                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Vent, reflect, or just chat. Based on your current vibe.</p>
-                        
-                        <div id="chat-box" style="height: 250px; overflow-y: auto; background: #f9fafb; border-radius: 16px; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
-                            <div style="align-self: flex-start; background: white; padding: 12px 18px; border-radius: 18px 18px 18px 4px; max-width: 85%; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 0.95rem; color: var(--text-dark); border: 1px solid #f3f4f6;">
-                                Hi <?php echo htmlspecialchars($username); ?>! I'm here to listen. How are you feeling right now?
+                <!-- Floating Chat Button (Bottom Right) -->
+                <div id="chat-trigger" onclick="toggleChatModal()" style="position: fixed; bottom: 30px; right: 30px; display: flex; align-items: center; gap: 12px; cursor: pointer; z-index: 999; animation: floatBounce 3s ease-in-out infinite;">
+                    <div style="background: rgba(30, 41, 59, 0.95); color: white; padding: 12px 20px; border-radius: 25px; font-weight: 600; font-size: 0.95rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3); backdrop-filter: blur(10px);">
+                        Chat with AI!
+                    </div>
+                    <div style="width: 55px; height: 55px; border-radius: 50%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border: 3px solid white;">
+                        <img src="assets/images/chat_robot.png" alt="AI" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                </div>
+
+                <!-- Chat Modal -->
+                <div id="chat-modal" style="display: none; position: fixed; bottom: 100px; right: 30px; width: 380px; max-height: 500px; background: white; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 1000; overflow: hidden;">
+                    <!-- Modal Header -->
+                    <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,0.3);">
+                                <img src="assets/images/chat_robot.png" alt="AI" style="width: 100%; height: 100%; object-fit: cover;">
+                            </div>
+                            <div>
+                                <h3 style="color: white; margin: 0; font-size: 1rem; font-weight: 700;">Mood Companion</h3>
+                                <p style="color: rgba(255,255,255,0.7); margin: 0; font-size: 0.75rem;">AI-Powered • Online</p>
                             </div>
                         </div>
-
-                        <div style="margin-top: 15px; display: flex; gap: 10px;">
-                            <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid #e5e7eb; outline: none; transition: border 0.2s;" onfocus="this.style.borderColor = 'var(--primary-color)'" onblur="this.style.borderColor = '#e5e7eb'">
-                            <button onclick="sendMessage()" id="chat-send-btn" style="background: var(--primary-color); color: white; border: none; width: 46px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;">→</button>
+                        <button onclick="toggleChatModal()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 5px; line-height: 1;">&times;</button>
+                    </div>
+                    
+                    <!-- Chat Messages -->
+                    <div id="chat-box" style="height: 300px; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #f8fafc;">
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <div style="min-width: 32px; height: 32px; border-radius: 10px; overflow: hidden; flex-shrink: 0;">
+                                <img src="assets/images/chat_robot.png" alt="AI" style="width: 100%; height: 100%; object-fit: cover;">
+                            </div>
+                            <div style="background: white; padding: 12px 16px; border-radius: 4px 16px 16px 16px; max-width: 85%; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+                                <p style="margin: 0; color: #334155; font-size: 0.9rem; line-height: 1.5;">
+                                    Hi <?php echo htmlspecialchars($username); ?>! 👋 How are you feeling today?
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Input Area -->
+                    <div style="padding: 16px; background: white; border-top: 1px solid #e2e8f0;">
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chat-input" placeholder="Type a message..." 
+                                style="flex: 1; padding: 12px 16px; border-radius: 25px; border: 1px solid #e2e8f0; outline: none; font-size: 0.9rem; transition: all 0.2s;"
+                                onfocus="this.style.borderColor = '#6366f1'; this.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';"
+                                onblur="this.style.borderColor = '#e2e8f0'; this.style.boxShadow = 'none';">
+                            <button onclick="sendMessage()" id="chat-send-btn" 
+                                style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; border: none; width: 46px; height: 46px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); transition: transform 0.2s;"
+                                onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
+
+                <style>
+                    @keyframes floatBounce {
+                        0%, 100% { transform: translateY(0); }
+                        50% { transform: translateY(-8px); }
+                    }
+                </style>
 
                 <!-- COL 2: Gratitude & Insights (New Column) -->
                 <div style="display: flex; flex-direction: column; gap: 20px;">
@@ -651,6 +696,36 @@ foreach ($allGratitudeLogs as $entry) {
             }
         });
 
+        // Toggle Chat Modal
+        function toggleChatModal() {
+            const modal = document.getElementById('chat-modal');
+            const trigger = document.getElementById('chat-trigger');
+            const chatBox = document.getElementById('chat-box');
+            const username = "<?php echo htmlspecialchars($username); ?>";
+            
+            if (modal.style.display === 'none' || modal.style.display === '') {
+                modal.style.display = 'block';
+                trigger.style.display = 'none';
+                document.getElementById('chat-input').focus();
+            } else {
+                modal.style.display = 'none';
+                trigger.style.display = 'flex';
+                // Clear chat history when closing
+                chatBox.innerHTML = `
+                    <div style="display: flex; gap: 10px; align-items: flex-start;">
+                        <div style="min-width: 32px; height: 32px; border-radius: 10px; overflow: hidden; flex-shrink: 0;">
+                            <img src="assets/images/chat_robot.png" alt="AI" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                        <div style="background: white; padding: 12px 16px; border-radius: 4px 16px 16px 16px; max-width: 85%; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+                            <p style="margin: 0; color: #334155; font-size: 0.9rem; line-height: 1.5;">
+                                Hi ${username}! 👋 How are you feeling today?
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         // Chatbot Logic
         const chatBox = document.getElementById('chat-box');
         const chatInput = document.getElementById('chat-input');
@@ -660,6 +735,11 @@ foreach ($allGratitudeLogs as $entry) {
         chatInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter') sendMessage();
         });
+
+        function quickReply(message) {
+            chatInput.value = message;
+            sendMessage();
+        }
 
         function sendMessage() {
             const text = chatInput.value.trim();
@@ -695,21 +775,31 @@ foreach ($allGratitudeLogs as $entry) {
         }
 
         function addMessage(text, sender, isTyping = false) {
-            const div = document.createElement('div');
+            const wrapper = document.createElement('div');
             
             if (sender === 'user') {
-                div.style.cssText = "align-self: flex-end; background: #6366f1; color: white; padding: 12px 18px; border-radius: 18px 18px 4px 18px; max-width: 85%; font-size: 0.95rem; box-shadow: 0 4px 6px rgba(99, 102, 241, 0.2);";
+                wrapper.style.cssText = "display: flex; justify-content: flex-end;";
+                wrapper.innerHTML = `
+                    <div style="background: var(--primary-color); color: white; padding: 10px 14px; border-radius: 14px 14px 4px 14px; max-width: 85%; font-size: 0.9rem;">
+                        ${text}
+                    </div>
+                `;
             } else {
-                div.style.cssText = "align-self: flex-start; background: white; color: #1f2937; padding: 12px 18px; border-radius: 18px 18px 18px 4px; max-width: 85%; font-size: 0.95rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #f3f4f6;";
-                if(isTyping) { div.style.color = "#9ca3af"; div.style.fontStyle = "italic"; }
+                wrapper.style.cssText = "display: flex; gap: 8px; align-items: flex-start;";
+                const typingStyle = isTyping ? 'color: #9ca3af; font-style: italic;' : 'color: var(--text-dark);';
+                wrapper.innerHTML = `
+                    <div style="min-width: 28px; height: 28px; border-radius: 8px; overflow: hidden; flex-shrink: 0;"><img src="assets/images/chat_robot.png" alt="AI" style="width: 100%; height: 100%; object-fit: cover;"></div>
+                    <div style="background: white; padding: 10px 14px; border-radius: 4px 14px 14px 14px; max-width: 85%; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #f3f4f6;">
+                        <span style="margin: 0; ${typingStyle} font-size: 0.9rem;">${text}</span>
+                    </div>
+                `;
             }
             
-            if (isTyping) div.id = 'typing-' + Date.now();
+            if (isTyping) wrapper.id = 'typing-' + Date.now();
             
-            div.textContent = text;
-            chatBox.appendChild(div);
+            chatBox.appendChild(wrapper);
             chatBox.scrollTop = chatBox.scrollHeight;
-            return div.id;
+            return wrapper.id;
         }
     </script>
 </body>

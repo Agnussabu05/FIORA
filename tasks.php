@@ -180,7 +180,56 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
     <title>Fiora - Tasks</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
+        .flatpickr-calendar {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            border-radius: 16px !important;
+            background: white !important; /* Ensure background is white */
+        }
+        /* Force text colors to be visible */
+        .flatpickr-day {
+            color: #1f2937 !important; /* Dark grey */
+            font-weight: 500;
+        }
+        .flatpickr-day.flatpickr-disabled, .flatpickr-day.flatpickr-disabled:hover {
+            color: #d1d5db !important; /* Light grey for disabled */
+        }
+        .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange, .flatpickr-day.selected.inRange, .flatpickr-day.startRange.inRange, .flatpickr-day.endRange.inRange, .flatpickr-day:focus, .flatpickr-day:hover {
+            background: var(--primary) !important;
+            color: #fff !important;
+            border-color: var(--primary) !important;
+        }
+        .flatpickr-current-month, .flatpickr-current-month input.cur-year {
+            color: #111827 !important; /* Black for header */
+            font-weight: 700;
+        }
+        .flatpickr-weekday {
+            color: #4b5563 !important;
+            font-weight: 600;
+        }
+        .flatpickr-time input {
+            color: #111827 !important;
+        }
+        .flatpickr-time .flatpickr-am-pm {
+            color: #111827 !important;
+        }
+        .flatpickr-ok-btn {
+            width: 90%;
+            margin: 10px 5%;
+            padding: 10px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .flatpickr-ok-btn:hover {
+            background: #000;
+        }
+
         .filter-section {
             background: rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(10px);
@@ -190,8 +239,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
             margin-bottom: 25px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.05);
         }
-        
-        /* Custom Premium Checkbox Link Style */
+
         .checkbox-btn {
             position: relative;
             width: 28px;
@@ -199,8 +247,9 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
             margin-right: 15px;
             flex-shrink: 0;
             cursor: pointer;
-            display: block; /* Important for anchor */
+            display: block;
         }
+
         .checkbox-mark {
             position: absolute; top: 0; left: 0; height: 28px; width: 28px;
             background-color: white; border: 2px solid var(--primary);
@@ -412,10 +461,10 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                             </h2>
                             <div style="display: flex; align-items: center; gap: 15px; font-size: 0.9rem; color: #444; font-weight: 500;">
                                 <span style="display: flex; align-items: center; gap: 6px;">
-                                    ClockIcon <?php echo date('M d, g:i A', strtotime($recommended_task['deadline'])); ?>
+                                    📅 <?php echo date('M d, g:i A', strtotime($recommended_task['deadline'])); ?>
                                 </span>
                                 <span style="display: flex; align-items: center; gap: 6px;">
-                                    TagIcon <?php echo htmlspecialchars($recommended_task['category']); ?>
+                                    🏷️ <?php echo htmlspecialchars($recommended_task['category']); ?>
                                 </span>
                             </div>
                         </div>
@@ -513,11 +562,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                         <?php endforeach; ?>
                     </div>
 
-                    <!-- Right: Smart Sort -->
-                    <button onclick="window.location.href='tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>&search=<?php echo urlencode($search_query); ?>&sort=<?php echo $smart_sort_active ? 'default' : 'smart'; ?>'" 
-                            style="padding: 10px 20px; border-radius: 15px; border: none; cursor: pointer; font-weight: 800; transition: all 0.3s; display: flex; align-items: center; gap: 8px; <?php echo $smart_sort_active ? 'background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);' : 'background: white; color: 666; border: 1px solid var(--glass-border);'; ?>">
-                        <span>✨</span> Smart Sort <?php echo $smart_sort_active ? 'On' : 'Off'; ?>
-                    </button>
+
                 </div>
             </div>
 
@@ -634,7 +679,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
     <div class="modal" id="taskModal">
         <div class="glass-card" style="width: 450px;">
             <h3 style="margin-bottom: 20px;">Add New Task</h3>
-            <form action="tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" method="POST">
+            <form id="addTaskForm" novalidate action="tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" method="POST">
                 <input type="hidden" name="action" value="add">
                 
                 <div class="form-group">
@@ -662,7 +707,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
 
                 <div class="form-group">
                     <label>Deadline <span style="color: #ef4444;">*</span></label>
-                    <input type="datetime-local" name="deadline" id="task-deadline" class="form-input" required>
+                    <input type="text" name="deadline" id="task-deadline" class="form-input flatpickr-input" required placeholder="Select Date & Time">
                 </div>
 
                 <div class="form-group">
@@ -686,7 +731,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
     <div class="modal" id="editTaskModal">
         <div class="glass-card" style="width: 450px;">
             <h3 style="margin-bottom: 20px;">Edit Task</h3>
-            <form action="tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" method="POST">
+            <form id="editTaskForm" novalidate action="tasks.php?status=<?php echo $filter_status; ?>&category=<?php echo $filter_category; ?>" method="POST">
                 <input type="hidden" name="action" value="update">
                 <input type="hidden" name="task_id" id="edit-task-id">
                 
@@ -715,7 +760,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
 
                 <div class="form-group">
                     <label>Deadline <span style="color: #ef4444;">*</span></label>
-                    <input type="datetime-local" name="deadline" id="edit-task-deadline" class="form-input" required>
+                    <input type="text" name="deadline" id="edit-task-deadline" class="form-input flatpickr-input" required placeholder="Select Date & Time">
                 </div>
 
                 <div class="form-group">
@@ -872,94 +917,43 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
         });
 
         // Form Validation
-        const titleInput = document.querySelector('#task-title');
-        const deadlineInput = document.querySelector('#task-deadline');
-        const categoryInput = document.querySelector('#task-category');
-        
-        // Track field order for sequential validation
-        const requiredFields = [titleInput, categoryInput, deadlineInput];
-        
-        if (titleInput) {
-            // Validate on blur (leaving field)
-            titleInput.addEventListener('blur', function() {
-                validateField(this);
-            });
-            
-            // Clear error on input
-            titleInput.addEventListener('input', function() {
-                if(this.value.trim() !== '') {
-                    clearError(this);
-                }
-            });
-        }
+        // Form Validation System
+        function setupValidation(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return;
 
-        if (categoryInput) {
-            // When focusing on category, validate title
-            categoryInput.addEventListener('focus', function() {
-                if (titleInput && titleInput.value.trim() === '') {
-                    validateField(titleInput);
-                }
-            });
+            const inputs = form.querySelectorAll('input[required], select[required], textarea[required]');
             
-            categoryInput.addEventListener('blur', function() {
-                validateField(this);
+            inputs.forEach(input => {
+                input.addEventListener('blur', () => validateField(input));
+                input.addEventListener('input', () => {
+                    if (input.value.trim() !== '') clearError(input);
+                });
+                input.addEventListener('change', () => {
+                   if (input.value.trim() !== '') clearError(input);
+                });
             });
-            
-            categoryInput.addEventListener('change', function() {
-                if(this.value !== '') {
-                    clearError(this);
-                }
-            });
-        }
 
-        if (deadlineInput) {
-            // When focusing on deadline, validate previous fields
-            deadlineInput.addEventListener('focus', function() {
-                if (titleInput && titleInput.value.trim() === '') {
-                    validateField(titleInput);
-                }
-                if (categoryInput && categoryInput.value === '') {
-                    validateField(categoryInput);
-                }
-            });
-            
-            deadlineInput.addEventListener('blur', function() {
-                validateField(this);
-            });
-            
-            deadlineInput.addEventListener('change', function() {
-                if(this.value !== '') {
-                    clearError(this);
-                }
-            });
-        }
-        
-        // Also validate when focusing on description (optional field)
-        const descriptionInput = document.querySelector('textarea[name="description"]');
-        if (descriptionInput) {
-            descriptionInput.addEventListener('focus', function() {
-                // Validate all required fields when user moves to optional field
-                requiredFields.forEach(field => {
-                    if (field) {
-                        if (field.type === 'text' && field.value.trim() === '') {
-                            validateField(field);
-                        } else if ((field.tagName === 'SELECT' || field.type === 'datetime-local') && field.value === '') {
-                            validateField(field);
-                        }
+            form.addEventListener('submit', function(e) {
+                let isValid = true;
+                inputs.forEach(input => {
+                    if (!validateField(input)) {
+                        isValid = false;
                     }
                 });
+
+                if (!isValid) {
+                    e.preventDefault();
+                    // Focus first invalid input
+                    const firstInvalid = form.querySelector('.error-message')?.parentNode?.querySelector('input, select, textarea');
+                    if(firstInvalid) firstInvalid.focus();
+                }
             });
         }
 
         function validateField(field) {
             const existingError = field.parentNode.querySelector('.error-message');
-            
-            let isEmpty = false;
-            if (field.type === 'text') {
-                isEmpty = field.value.trim() === '';
-            } else {
-                isEmpty = field.value === '';
-            }
+            let isEmpty = field.value.trim() === '';
             
             if (isEmpty) {
                 if (!existingError) {
@@ -969,12 +963,22 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                     error.style.fontSize = '0.85rem';
                     error.style.marginTop = '5px';
                     error.style.fontWeight = '600';
-                    error.innerText = 'This field is compulsory';
+                    
+                    // Specific Messages match user request
+                    let msg = 'This field is required';
+                    if (field.name === 'title') msg = 'Please enter a task title';
+                    else if (field.name === 'category') msg = 'Please select a category';
+                    else if (field.name === 'priority') msg = 'Please select a priority';
+                    else if (field.name === 'deadline') msg = 'Please select a deadline';
+                    
+                    error.innerText = msg;
                     field.parentNode.appendChild(error);
                     field.style.borderColor = '#ef4444';
                 }
+                return false;
             } else {
                 clearError(field);
+                return true;
             }
         }
 
@@ -985,6 +989,12 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 field.style.borderColor = '';
             }
         }
+
+        // Initialize Validation
+        document.addEventListener('DOMContentLoaded', function() {
+           setupValidation('addTaskForm');
+           setupValidation('editTaskForm');
+        });
 
         // Urgent Tasks Modal Functions
         function openUrgentModal(type) {
@@ -1049,6 +1059,29 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
             if (event.target == taskModal) closeModal();
             if (event.target == editModal) closeEditModal();
         }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            flatpickr(".flatpickr-input", {
+                enableTime: true,
+                dateFormat: "Y-m-d H:i", // Submit format (24hr)
+                altInput: true,          // Show friendly format
+                altFormat: "F j, Y h:i K", // e.g. January 15, 2026 09:45 PM
+                time_24hr: false,        // 12-hour picker UI
+                minDate: "today",
+                onReady: function(selectedDates, dateStr, instance) {
+                    const btn = document.createElement("button");
+                    btn.type = "button"; 
+                    btn.innerText = "OK";
+                    btn.className = "flatpickr-ok-btn";
+                    btn.onclick = function() {
+                        instance.close();
+                    };
+                    instance.calendarContainer.appendChild(btn);
+                }
+            });
+        });
     </script>
 
     <!-- Urgent Tasks Modal -->
@@ -1126,6 +1159,7 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 </div>
             </div>
         </div>
+    </div>
     <!-- Notification Modal -->
     <div class="modal" id="notificationModal">
         <div class="glass-card" style="width: 450px; max-height: 80vh; display: flex; flex-direction: column; padding: 0;">

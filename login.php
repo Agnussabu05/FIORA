@@ -13,8 +13,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
 
-    if (empty($username) || empty($password)) {
+    if (empty($username) && empty($password)) {
         $error = "Please enter both username and password.";
+    } elseif (empty($username)) {
+        $error = "Please enter your username or email.";
+    } elseif (empty($password)) {
+        $error = "Please enter the password.";
     } elseif (!$pdo) {
          $error = "Database unavailable. UI Mode Only.";
          // Logic to allow "demo" login if DB is down? 
@@ -344,18 +348,66 @@ if (isset($db_connection_error)) {
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="">
+            <form method="POST" action="" id="loginForm" onsubmit="return validateLogin(event)" novalidate>
                 <div class="form-group">
-                    <input type="text" name="username" class="form-input" placeholder="Username or Email" required autocomplete="username">
+                    <input type="text" name="username" id="username" class="form-input" placeholder="Username or Email" required autocomplete="username" oninput="clearError(this)">
+                    <div id="username_error" style="color: #DC2626; font-size: 0.85rem; margin-top: 5px; display: none;"></div>
                 </div>
                 <div class="form-group" style="margin-bottom: 24px;">
-                    <input type="password" name="password" class="form-input" placeholder="Password" required autocomplete="current-password">
+                    <input type="password" name="password" id="password" class="form-input" placeholder="Password" required autocomplete="current-password" oninput="clearError(this)">
+                    <div id="password_error" style="color: #DC2626; font-size: 0.85rem; margin-top: 5px; display: none;"></div>
                     <div style="text-align: right; margin-top: 8px;">
                         <a href="forgot_password.php" class="auth-link" style="font-size: 0.85rem; font-weight: 500; opacity: 0.8;">Forgot Password?</a>
                     </div>
                 </div>
                 <button type="submit" class="btn-primary">Sign In</button>
             </form>
+
+            <script>
+                function validateLogin(e) {
+                    const username = document.getElementById('username');
+                    const password = document.getElementById('password');
+                    const userError = document.getElementById('username_error');
+                    const passError = document.getElementById('password_error');
+                    
+                    let isValid = true;
+
+                    // Reset
+                    username.style.borderColor = "";
+                    password.style.borderColor = "";
+                    userError.style.display = 'none';
+                    passError.style.display = 'none';
+
+                    if (!username.value.trim()) {
+                        username.style.borderColor = "#DC2626";
+                        userError.textContent = "Please enter your username or email.";
+                        userError.style.display = 'block';
+                        isValid = false;
+                    }
+
+                    if (!password.value.trim()) {
+                        password.style.borderColor = "#DC2626";
+                        passError.textContent = "Please enter the password.";
+                        passError.style.display = 'block';
+                        isValid = false;
+                    }
+
+                    if (!isValid) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    return true;
+                }
+
+                function clearError(input) {
+                    input.style.borderColor = "";
+                    if(input.id === 'username') {
+                        document.getElementById('username_error').style.display = 'none';
+                    } else if(input.id === 'password') {
+                        document.getElementById('password_error').style.display = 'none';
+                    }
+                }
+            </script>
 
             <div style="margin: 20px 0; display: flex; align-items: center; text-align: center; color: var(--text-muted);">
                 <hr style="flex: 1; border: none; border-top: 1px solid rgba(0,0,0,0.1);">

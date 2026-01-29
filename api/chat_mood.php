@@ -1,7 +1,9 @@
 <?php
-// api/chat_mood.php - ADVANCED Offline Version
+// api/chat_mood.php - AI-Powered Version with Fallback
 header('Content-Type: application/json');
 session_start();
+
+require_once 'config.php';
 
 function sendError($message) {
     echo json_encode(['success' => false, 'error' => $message]);
@@ -23,6 +25,66 @@ if (empty($message)) {
 // Initialize conversation history
 if (!isset($_SESSION['chat_history'])) {
     $_SESSION['chat_history'] = [];
+}
+
+// AI API Call Function
+function callAI($userMessage, $mood, $history) {
+    global $apiKey, $model;
+    
+    if (empty($apiKey)) {
+        return null; // Fallback to pattern matching
+    }
+    
+    // Build conversation context
+    $historyContext = "";
+    foreach (array_slice($history, -3) as $h) {
+        $historyContext .= "User: " . $h['message'] . "\n";
+    }
+    
+    $systemPrompt = "You are a friendly, empathetic AI mood companion named Fiora. You help users with their emotional well-being, provide support, motivation, and helpful advice. Keep responses concise (2-3 sentences max), warm, and use emojis sparingly. The user's current mood is: $mood.";
+    
+    $prompt = "[INST] $systemPrompt\n\n$historyContext\nUser: $userMessage\n\nAssistant: [/INST]";
+    
+    $payload = json_encode([
+        "inputs" => $prompt,
+        "parameters" => [
+            "max_new_tokens" => 150,
+            "temperature" => 0.7,
+            "return_full_text" => false
+        ]
+    ]);
+    
+    $ch = curl_init("https://api-inference.huggingface.co/models/$model");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer $apiKey",
+            "Content-Type: application/json"
+        ],
+        CURLOPT_TIMEOUT => 15
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode !== 200) {
+        return null; // Fallback
+    }
+    
+    $data = json_decode($response, true);
+    
+    if (isset($data[0]['generated_text'])) {
+        $text = trim($data[0]['generated_text']);
+        // Clean up any remaining prompt artifacts
+        $text = preg_replace('/^\[\/INST\]\s*/', '', $text);
+        $text = preg_replace('/^Assistant:\s*/i', '', $text);
+        return $text;
+    }
+    
+    return null;
 }
 
 // Helper to pick random response
@@ -202,19 +264,19 @@ function generateResponse($message, $mood, $history) {
     }
     
     // STRESS - with intensity
-    if (preg_match('/\b(stress|anxious|overwhelm|worry|worried|pressure|nervous|panic|tense)\b/', $messageLower)) {
+    if (preg_match('/(stress|stressed|stressing|anxious|anxiety|overwhelm|overwhelmed|worry|worried|worrying|pressure|nervous|panic|tense|tension)/i', $messageLower)) {
         $responses = [
             1 => [
-                "I hear you - a bit of stress is normal. Try 5-4-3-2-1 grounding: name 5 things you see, 4 you touch, 3 you hear. 🌿",
-                "Stress happens! Quick reset: 3 deep breaths. Then ask: what can wait? 💙"
+                "Here's what helps with stress: 1) Take 5 deep breaths 2) Write down what's bothering you 3) Pick ONE thing to tackle first. You got this! 💪",
+                "Stress tip: Try the 5-4-3-2-1 technique - name 5 things you see, 4 you can touch, 3 you hear, 2 you smell, 1 you taste. It grounds you instantly! 🌿"
             ],
             2 => [
-                "That sounds quite overwhelming. Break it down: what's the ONE urgent thing? Tackle that first. 🎯",
-                "Stress piling up, I get it. Brain dump - write EVERYTHING down. Then prioritize top 3. 📝"
+                "When stressed, break it down: 1) What's the REAL problem? 2) What CAN you control? 3) Take one small action now. Progress beats perfection! 🎯",
+                "Stress management tips: Take a 10-min walk, drink water, write a quick brain dump of everything on your mind, then prioritize top 3. 📝"
             ],
             3 => [
-                "That sounds REALLY intense. Emergency: 5 slow breaths (4 in, 6 out). Then step away 10 minutes. 🚨",
-                "This is a LOT. Protocol: 1) Breathe 60 seconds. 2) What MUST happen TODAY? 3) Ask for help. 💪"
+                "For intense stress: STOP → BREATHE (4 sec in, 6 sec out, 5 times) → Ask 'What's the ONE thing I can do RIGHT NOW?' → Do it. You're stronger than this moment! 🔥",
+                "Emergency stress protocol: 1) 60 seconds of slow breathing 2) Step away from the situation 3) Call someone you trust 4) Remember: this will pass! 💙"
             ]
         ];
         return randomPick($responses[$intensity] ?? $responses[2]);
@@ -372,8 +434,13 @@ if (count($_SESSION['chat_history']) > 5) {
     $_SESSION['chat_history'] = array_slice($_SESSION['chat_history'], -5);
 }
 
-// Generate response
-$reply = generateResponse($message, $moodContext, $_SESSION['chat_history']);
+// Generate response - Try AI first, fallback to pattern matching
+$reply = callAI($message, $moodContext, $_SESSION['chat_history']);
+
+if (empty($reply)) {
+    // Fallback to pattern matching if AI fails
+    $reply = generateResponse($message, $moodContext, $_SESSION['chat_history']);
+}
 
 echo json_encode([
     'success' => true,

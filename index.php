@@ -113,6 +113,9 @@ $user_habits = $stmt->fetchAll();
                         </div>
                     </div>
                     
+                    <a href="generate_report.php" target="_blank" class="btn" style="background: white; border: 1px solid #cbd5e1; color: var(--text-main); font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        📄 Report
+                    </a>
                     <button class="btn btn-primary" onclick="alert('Quick add feature coming soon!')">+ Quick Add</button>
                     
                     <!-- Profile Button (Requested) -->

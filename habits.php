@@ -73,10 +73,39 @@ $logStmt = $pdo->prepare("SELECT habit_id, check_in_date FROM habit_logs WHERE c
 $logStmt->execute([$startDate, $endDate]);
 $allLogs = $logStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$logsByHabit = [];
+// Restore Logs Loop
 foreach ($allLogs as $l) {
     if (!isset($logsByHabit[$l['habit_id']])) $logsByHabit[$l['habit_id']] = [];
     $logsByHabit[$l['habit_id']][] = $l['check_in_date'];
+}
+
+// Check for Neglected Habits
+$neglectedHabits = [];
+$checkStmt = $pdo->prepare("
+    SELECT h.name, MAX(l.check_in_date) as last_check 
+    FROM habits h 
+    LEFT JOIN habit_logs l ON h.id = l.habit_id 
+    WHERE h.user_id = ? 
+    GROUP BY h.id
+");
+$checkStmt->execute([$user_id]);
+$allHabitStatus = $checkStmt->fetchAll();
+
+foreach ($allHabitStatus as $status) {
+    if ($status['last_check']) {
+        $daysSince = (strtotime(date('Y-m-d')) - strtotime($status['last_check'])) / (60 * 60 * 24);
+        if ($daysSince >= 3) {
+            $neglectedHabits[] = [
+                'name' => $status['name'],
+                'days' => floor($daysSince) . ' days missed'
+            ];
+        }
+    } else {
+        $neglectedHabits[] = [
+            'name' => $status['name'],
+            'days' => 'Not started yet'
+        ];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -105,8 +134,10 @@ foreach ($allLogs as $l) {
         .day-header.today { color: var(--primary); background: rgba(105, 126, 80, 0.1); border-radius: 8px; }
         
         .check-dot {
-            width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--glass-border);
-            background: white; cursor: pointer; display: inline-block; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 22px; height: 22px; border-radius: 6px; 
+            border: 2px solid #cbd5e1 !important; /* Visible Grey Border */
+            background: #f8fafc; /* Slight off-white */
+            cursor: pointer; display: inline-block; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .check-dot:hover { transform: scale(1.2); border-color: var(--primary); }
         .check-dot.completed { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(105, 126, 80, 0.4); }
@@ -283,5 +314,30 @@ foreach ($allLogs as $l) {
             if (e.target === document.getElementById('habitModal')) closeModal();
         });
     </script>
+    <!-- Neglected Habits Modal -->
+    <?php if (!empty($neglectedHabits)): ?>
+    <div class="modal active" id="reminderModal" style="z-index: 2000;">
+        <div class="glass-card" style="width: 450px; padding: 30px; text-align: center; border: 2px solid #fca5a5;">
+            <div style="font-size: 3rem; margin-bottom: 15px;">🥀</div>
+            <h3 style="color: #991b1b; margin-bottom: 10px;">Don't Let Your Streaks Fade!</h3>
+            <p style="color: #4b5563; margin-bottom: 20px;">We noticed you haven't tracked these habits in a while. Consistency is key!</p>
+            
+            <div style="background: #fef2f2; border-radius: 12px; padding: 15px; text-align: left; margin-bottom: 25px;">
+                <?php foreach($neglectedHabits as $h): ?>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 600; color: #7f1d1d;">
+                        <span><?php echo htmlspecialchars($h['name']); ?></span>
+                        <span style="font-size: 0.9rem;">⚠️ <?php echo $h['days']; ?> days missed</span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <button onclick="document.getElementById('reminderModal').classList.remove('active')" 
+                    class="btn btn-primary" style="width: 100%; background: #ef4444; border: none;">
+                I'll Get Back on Track!
+            </button>
+        </div>
+    </div>
+    <?php endif; ?>
+
 </body>
 </html>

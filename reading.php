@@ -419,6 +419,19 @@ $sold_count = count($sold_history);
 $listings_count = $stats['available'] + $sold_count + $lent_count; 
 $borrowed_count = count($borrowed_active); 
 
+// Fetch Purchased Books (books bought by user from marketplace)
+$purchasedParams = [$user_id];
+$purchasedSql = "SELECT b.*, t.price as purchase_price, t.transaction_date as purchase_date, u.username as seller_name 
+                FROM book_transactions t 
+                JOIN books b ON t.book_id = b.id 
+                JOIN users u ON t.seller_id = u.id 
+                WHERE t.buyer_id = ? AND t.type = 'buy'
+                ORDER BY t.transaction_date DESC";
+$purchasedStmt = $pdo->prepare($purchasedSql);
+$purchasedStmt->execute($purchasedParams);
+$purchased_books = $purchasedStmt->fetchAll();
+$purchased_count = count($purchased_books);
+
 if ($view === 'tracker') {
     // Base SQL for simple fetching
     $base_sql = "SELECT b.*, u.username as lender_name FROM books b LEFT JOIN users u ON b.borrowed_from = u.id WHERE b.user_id = ?";
@@ -427,16 +440,22 @@ if ($view === 'tracker') {
         // Fetch ONLY borrowed books (held by me, owned by others)
         $stmt = $pdo->prepare("SELECT b.*, u.username as lender_name FROM books b JOIN users u ON b.borrowed_from = u.id WHERE b.user_id = ? AND b.borrowed_from IS NOT NULL ORDER BY b.due_date ASC");
         $stmt->execute([$user_id]);
+        $tracker_books = $stmt->fetchAll();
+    }
+    elseif ($filter_status === 'purchased') {
+        // Use the purchased_books already fetched above
+        $tracker_books = $purchased_books;
     }
     elseif ($filter_status === 'all') {
         $stmt = $pdo->prepare($base_sql . " AND b.status IN ('reading', 'completed', 'wishlist') ORDER BY FIELD(b.status, 'reading', 'wishlist', 'completed'), b.created_at DESC");
         $stmt->execute([$user_id]);
+        $tracker_books = $stmt->fetchAll();
     } else {
         // Specific Status (reading, completed, wishlist, Available)
         $stmt = $pdo->prepare($base_sql . " AND b.status = ? ORDER BY b.created_at DESC");
         $stmt->execute([$user_id, $filter_status]);
-    }
-    $tracker_books = $stmt->fetchAll(); 
+        $tracker_books = $stmt->fetchAll();
+    } 
 
     // --- MERGE LOGIC FOR LISTINGS (TRACKER VIEW) ---
     if ($filter_status === 'Available') {
@@ -593,6 +612,7 @@ function getBookDarkColor($title) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book Hub - Fiora</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <style>
@@ -732,6 +752,12 @@ function getBookDarkColor($title) {
                     </a>
                     <a href="?view=tracker&status=wishlist" class="sub-tab <?php echo $filter_status == 'wishlist' ? 'active' : ''; ?>">
                         Wishlist <span style="opacity:0.7; font-size:0.8em; margin-left:4px;"><?php echo $stats['wishlist']; ?></span>
+                    </a>
+                    <a href="?view=tracker&status=borrowed" class="sub-tab <?php echo $filter_status == 'borrowed' ? 'active' : ''; ?>">
+                        📚 Borrowed <span style="opacity:0.7; font-size:0.8em; margin-left:4px;"><?php echo $borrowed_count; ?></span>
+                    </a>
+                    <a href="?view=tracker&status=purchased" class="sub-tab <?php echo $filter_status == 'purchased' ? 'active' : ''; ?>">
+                        🛒 Purchased <span style="opacity:0.7; font-size:0.8em; margin-left:4px;"><?php echo $purchased_count; ?></span>
                     </a>
                     <a href="?view=tracker&status=all" class="sub-tab <?php echo $filter_status == 'all' ? 'active' : ''; ?>">All Books</a>
                 </div>
@@ -1534,61 +1560,293 @@ function getBookDarkColor($title) {
 
 
 
-    <!-- MODAL: Payment / Checkout -->
+    <!-- MODAL: Razorpay-Style Payment -->
     <div class="modal" id="paymentModal">
-        <div class="modal-content" style="width: 400px; text-align: center;">
-            <div style="font-size: 3rem; margin-bottom: 10px;">💳</div>
-            <h3 style="margin-bottom: 5px;">Secure Checkout</h3>
-            <p style="color: #666; font-size: 0.9rem;">Complete your purchase details</p>
-
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 20px 0; text-align: left;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span style="color: #666;">Item</span>
-                    <strong id="payTitle">Book Title</strong>
+        <div class="modal-content" style="width: 420px; padding: 0; overflow: hidden; border-radius: 12px;">
+            <!-- Razorpay Header -->
+            <div style="background: linear-gradient(135deg, #3395FF 0%, #2B7AE4 100%); padding: 20px; color: white;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 40px; height: 40px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 1.2rem;">📚</span>
+                        </div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 1rem;">Fiora Book Hub</div>
+                            <div style="font-size: 0.75rem; opacity: 0.9;" id="payTitle2">Book Title</div>
+                        </div>
+                    </div>
+                    <button onclick="closeModal('paymentModal')" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span style="color: #666;">Seller</span>
-                    <span id="paySeller">User</span>
-                </div>
-                <div style="border-top: 1px dashed #ddd; margin: 10px 0;"></div>
-                <div style="display: flex; justify-content: space-between; font-size: 1.1rem;">
-                    <strong>Total</strong>
-                    <strong style="color: var(--success);" id="payAmount">₹0.00</strong>
-                </div>
-            </div>
-
-            <div style="text-align: left; margin-bottom: 25px;">
-                <label style="font-size: 0.8rem; font-weight: bold; display: block; margin-bottom: 8px;">Payment Method</label>
-                <div style="display: flex; gap: 10px;" id="payOptions">
-                    <label onclick="selectPayment(this)" style="flex: 1; border: 1px solid var(--primary); background: #f0f0f0; padding: 10px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="radio" name="paymethod" checked> 🏦 UPI
-                    </label>
-                    <label onclick="selectPayment(this)" style="flex: 1; border: 1px solid #ddd; background: white; padding: 10px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="radio" name="paymethod"> 💳 Card
-                    </label>
+                <div style="margin-top: 15px; text-align: center;">
+                    <div style="font-size: 0.8rem; opacity: 0.8;">Amount to Pay</div>
+                    <div style="font-size: 2rem; font-weight: 800;" id="payAmountHeader">₹0.00</div>
                 </div>
             </div>
-
-            <script>
-            function selectPayment(label) {
-                const container = document.getElementById('payOptions');
-                const labels = container.querySelectorAll('label');
-                labels.forEach(l => {
-                    l.style.border = '1px solid #ddd';
-                    l.style.background = 'white';
-                });
-                label.style.border = '1px solid var(--primary)';
-                label.style.background = '#f0f0f0';
-                label.querySelector('input').checked = true;
-            }
-            </script>
-
-            <button onclick="processPayment()" id="btnPay" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1rem;">
-                Pay <span id="payBtnAmount">₹0.00</span>
-            </button>
-            <button onclick="closeModal('paymentModal')" class="btn" style="width: 100%; margin-top: 10px; color: #888;">Cancel</button>
+            
+            <!-- Payment Methods Tabs -->
+            <div style="background: #f8f9fa; padding: 0;">
+                <div style="display: flex; border-bottom: 1px solid #e0e0e0;" id="paymentTabs">
+                    <button class="pay-tab active" onclick="switchPayTab('upi')" data-tab="upi" style="flex: 1; padding: 12px 8px; background: white; border: none; border-bottom: 2px solid #3395FF; color: #3395FF; font-weight: 600; font-size: 0.8rem; cursor: pointer;">
+                        <div>📱</div> UPI
+                    </button>
+                    <button class="pay-tab" onclick="switchPayTab('card')" data-tab="card" style="flex: 1; padding: 12px 8px; background: #f8f9fa; border: none; border-bottom: 2px solid transparent; color: #666; font-weight: 600; font-size: 0.8rem; cursor: pointer;">
+                        <div>💳</div> Cards
+                    </button>
+                    <button class="pay-tab" onclick="switchPayTab('netbanking')" data-tab="netbanking" style="flex: 1; padding: 12px 8px; background: #f8f9fa; border: none; border-bottom: 2px solid transparent; color: #666; font-weight: 600; font-size: 0.8rem; cursor: pointer;">
+                        <div>🏦</div> Net Banking
+                    </button>
+                    <button class="pay-tab" onclick="switchPayTab('wallet')" data-tab="wallet" style="flex: 1; padding: 12px 8px; background: #f8f9fa; border: none; border-bottom: 2px solid transparent; color: #666; font-weight: 600; font-size: 0.8rem; cursor: pointer;">
+                        <div>👛</div> Wallet
+                    </button>
+                </div>
+                
+                <!-- UPI Tab Content -->
+                <div id="tabUpi" class="pay-tab-content" style="padding: 20px; display: block;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 8px;">Enter UPI ID</label>
+                        <input type="text" id="upiId" placeholder="yourname@upi" style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box;">
+                    </div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/UPI-Logo-vector.svg/1200px-UPI-Logo-vector.svg.png" alt="UPI" style="height: 25px; opacity: 0.7;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span style="font-size: 0.75rem; padding: 4px 8px; background: #e8f5e9; border-radius: 4px; color: #2e7d32;">GPay</span>
+                            <span style="font-size: 0.75rem; padding: 4px 8px; background: #e3f2fd; border-radius: 4px; color: #1565c0;">PhonePe</span>
+                            <span style="font-size: 0.75rem; padding: 4px 8px; background: #fff3e0; border-radius: 4px; color: #e65100;">Paytm</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Card Tab Content -->
+                <div id="tabCard" class="pay-tab-content" style="padding: 20px; display: none;">
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px;">Card Number</label>
+                        <input type="text" placeholder="1234 5678 9012 3456" maxlength="19" style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box;">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px;">Expiry</label>
+                            <input type="text" placeholder="MM/YY" maxlength="5" style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px;">CVV</label>
+                            <input type="password" placeholder="•••" maxlength="4" style="width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; box-sizing: border-box;">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; opacity: 0.6;">
+                        <span style="font-size: 1.5rem;">💳</span>
+                        <span style="font-size: 0.75rem; color: #666;">Visa, Mastercard, RuPay supported</span>
+                    </div>
+                </div>
+                
+                <!-- Net Banking Tab Content -->
+                <div id="tabNetbanking" class="pay-tab-content" style="padding: 20px; display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <label style="border: 1px solid #ddd; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="bank" checked> <span style="font-weight: 500;">HDFC Bank</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="bank"> <span style="font-weight: 500;">ICICI Bank</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="bank"> <span style="font-weight: 500;">SBI</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="bank"> <span style="font-weight: 500;">Axis Bank</span>
+                        </label>
+                    </div>
+                    <select style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-top: 12px; font-size: 0.9rem; max-height: 200px;">
+                        <option value="">Select Other Bank...</option>
+                        <optgroup label="Public Sector Banks">
+                            <option>Allahabad Bank</option>
+                            <option>Andhra Bank</option>
+                            <option>Bank of Baroda</option>
+                            <option>Bank of India</option>
+                            <option>Bank of Maharashtra</option>
+                            <option>Canara Bank</option>
+                            <option>Central Bank of India</option>
+                            <option>Corporation Bank</option>
+                            <option>Dena Bank</option>
+                            <option>Indian Bank</option>
+                            <option>Indian Overseas Bank</option>
+                            <option>Oriental Bank of Commerce</option>
+                            <option>Punjab & Sind Bank</option>
+                            <option>Punjab National Bank</option>
+                            <option>State Bank of India</option>
+                            <option>Syndicate Bank</option>
+                            <option>UCO Bank</option>
+                            <option>Union Bank of India</option>
+                            <option>United Bank of India</option>
+                            <option>Vijaya Bank</option>
+                        </optgroup>
+                        <optgroup label="Private Sector Banks">
+                            <option>Axis Bank</option>
+                            <option>Bandhan Bank</option>
+                            <option>Catholic Syrian Bank</option>
+                            <option>City Union Bank</option>
+                            <option>DCB Bank</option>
+                            <option>Dhanlaxmi Bank</option>
+                            <option>Federal Bank</option>
+                            <option>HDFC Bank</option>
+                            <option>ICICI Bank</option>
+                            <option>IDBI Bank</option>
+                            <option>IDFC First Bank</option>
+                            <option>IndusInd Bank</option>
+                            <option>Jammu & Kashmir Bank</option>
+                            <option>Karnataka Bank</option>
+                            <option>Karur Vysya Bank</option>
+                            <option>Kotak Mahindra Bank</option>
+                            <option>Lakshmi Vilas Bank</option>
+                            <option>Nainital Bank</option>
+                            <option>RBL Bank</option>
+                            <option>South Indian Bank</option>
+                            <option>Tamilnad Mercantile Bank</option>
+                            <option>Yes Bank</option>
+                        </optgroup>
+                        <optgroup label="Small Finance Banks">
+                            <option>AU Small Finance Bank</option>
+                            <option>Capital Small Finance Bank</option>
+                            <option>Equitas Small Finance Bank</option>
+                            <option>ESAF Small Finance Bank</option>
+                            <option>Fincare Small Finance Bank</option>
+                            <option>Jana Small Finance Bank</option>
+                            <option>North East Small Finance Bank</option>
+                            <option>Suryoday Small Finance Bank</option>
+                            <option>Ujjivan Small Finance Bank</option>
+                            <option>Utkarsh Small Finance Bank</option>
+                        </optgroup>
+                        <optgroup label="Payments Banks">
+                            <option>Airtel Payments Bank</option>
+                            <option>India Post Payments Bank</option>
+                            <option>Jio Payments Bank</option>
+                            <option>Paytm Payments Bank</option>
+                            <option>Fino Payments Bank</option>
+                            <option>NSDL Payments Bank</option>
+                        </optgroup>
+                        <optgroup label="Regional Rural Banks">
+                            <option>Aryavart Bank</option>
+                            <option>Baroda Gujarat Gramin Bank</option>
+                            <option>Baroda Rajasthan Kshetriya Gramin Bank</option>
+                            <option>Baroda UP Bank</option>
+                            <option>Chaitanya Godavari Gramin Bank</option>
+                            <option>Chhattisgarh Rajya Gramin Bank</option>
+                            <option>Dakshin Bihar Gramin Bank</option>
+                            <option>Ellaquai Dehati Bank</option>
+                            <option>Himachal Pradesh Gramin Bank</option>
+                            <option>J&K Grameen Bank</option>
+                            <option>Jharkhand Rajya Gramin Bank</option>
+                            <option>Karnataka Gramin Bank</option>
+                            <option>Karnataka Vikas Grameena Bank</option>
+                            <option>Kerala Gramin Bank</option>
+                            <option>Madhya Pradesh Gramin Bank</option>
+                            <option>Madhyanchal Gramin Bank</option>
+                            <option>Maharashtra Gramin Bank</option>
+                            <option>Manipur Rural Bank</option>
+                            <option>Meghalaya Rural Bank</option>
+                            <option>Mizoram Rural Bank</option>
+                            <option>Nagaland Rural Bank</option>
+                            <option>Odisha Gramya Bank</option>
+                            <option>Paschim Banga Gramin Bank</option>
+                            <option>Prathama UP Gramin Bank</option>
+                            <option>Puduvai Bharathiar Grama Bank</option>
+                            <option>Punjab Gramin Bank</option>
+                            <option>Rajasthan Marudhara Gramin Bank</option>
+                            <option>Saptagiri Grameena Bank</option>
+                            <option>Sarva Haryana Gramin Bank</option>
+                            <option>Saurashtra Gramin Bank</option>
+                            <option>Tamil Nadu Grama Bank</option>
+                            <option>Telangana Grameena Bank</option>
+                            <option>Tripura Gramin Bank</option>
+                            <option>Utkal Grameen Bank</option>
+                            <option>Uttar Bihar Gramin Bank</option>
+                            <option>Uttarakhand Gramin Bank</option>
+                            <option>Uttarbanga Kshetriya Gramin Bank</option>
+                            <option>Vidharbha Konkan Gramin Bank</option>
+                        </optgroup>
+                        <optgroup label="Cooperative Banks">
+                            <option>Andhra Pradesh State Coop Bank</option>
+                            <option>Bombay Mercantile Coop Bank</option>
+                            <option>Gujarat State Coop Bank</option>
+                            <option>Kalupur Commercial Coop Bank</option>
+                            <option>Mehsana Urban Coop Bank</option>
+                            <option>NKGSB Coop Bank</option>
+                            <option>Rajkot Nagrik Sahakari Bank</option>
+                            <option>Saraswat Coop Bank</option>
+                            <option>Shamrao Vithal Coop Bank</option>
+                            <option>Surat People's Coop Bank</option>
+                            <option>Thane Bharat Sahakari Bank</option>
+                            <option>Zoroastrian Coop Bank</option>
+                        </optgroup>
+                    </select>
+                </div>
+                
+                <!-- Wallet Tab Content -->
+                <div id="tabWallet" class="pay-tab-content" style="padding: 20px; display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <label style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="wallet" checked> <span style="font-weight: 500;">💙 Paytm</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="wallet"> <span style="font-weight: 500;">💜 PhonePe</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="wallet"> <span style="font-weight: 500;">🟡 Amazon Pay</span>
+                        </label>
+                        <label style="border: 1px solid #ddd; padding: 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#3395FF'" onmouseout="this.style.borderColor='#ddd'">
+                            <input type="radio" name="wallet"> <span style="font-weight: 500;">🟢 Mobikwik</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pay Button -->
+            <div style="padding: 20px; background: white; border-top: 1px solid #eee;">
+                <button onclick="processPayment()" id="btnPay" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #3395FF 0%, #2B7AE4 100%); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;">
+                    <span>🔒</span> Pay <span id="payBtnAmount">₹0.00</span>
+                </button>
+                <div style="text-align: center; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                    <span style="font-size: 0.7rem; color: #888;">Secured by</span>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #3395FF;">Razorpay</span>
+                    <span style="font-size: 0.7rem; color: #888;">🔐</span>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <script>
+    // Hidden elements for backward compatibility
+    const payTitleHidden = document.createElement('span');
+    payTitleHidden.id = 'payTitle';
+    payTitleHidden.style.display = 'none';
+    document.body.appendChild(payTitleHidden);
+    
+    const paySellerHidden = document.createElement('span');
+    paySellerHidden.id = 'paySeller';
+    paySellerHidden.style.display = 'none';
+    document.body.appendChild(paySellerHidden);
+    
+    const payAmountHidden = document.createElement('span');
+    payAmountHidden.id = 'payAmount';
+    payAmountHidden.style.display = 'none';
+    document.body.appendChild(payAmountHidden);
+    
+    function switchPayTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.pay-tab-content').forEach(c => c.style.display = 'none');
+        // Show selected tab content
+        document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).style.display = 'block';
+        
+        // Update tab styles
+        document.querySelectorAll('.pay-tab').forEach(t => {
+            t.style.background = '#f8f9fa';
+            t.style.borderBottom = '2px solid transparent';
+            t.style.color = '#666';
+        });
+        const activeTab = document.querySelector(`.pay-tab[data-tab="${tabName}"]`);
+        activeTab.style.background = 'white';
+        activeTab.style.borderBottom = '2px solid #3395FF';
+        activeTab.style.color = '#3395FF';
+    }
+    </script>
 
     <!-- MODAL: List to Market -->
     <div class="modal" id="listToMarketModal">
@@ -1731,7 +1989,7 @@ function getBookDarkColor($title) {
             location.reload();
         }
 
-        // --- Payment Logic ---
+        // --- Payment Logic (Razorpay Style Demo) ---
         function openPaymentModal(id, title, price, seller) {
             currentBookId = id;
             document.getElementById('payTitle').innerText = title;
@@ -1740,6 +1998,13 @@ function getBookDarkColor($title) {
             const formattedPrice = '₹' + parseFloat(price).toFixed(2);
             document.getElementById('payAmount').innerText = formattedPrice;
             document.getElementById('payBtnAmount').innerText = formattedPrice;
+            
+            // Set Razorpay-style header
+            document.getElementById('payTitle2').innerText = title;
+            document.getElementById('payAmountHeader').innerText = formattedPrice;
+            
+            // Reset to UPI tab
+            switchPayTab('upi');
             
             openModal('paymentModal');
         }
@@ -1753,7 +2018,7 @@ function getBookDarkColor($title) {
             btn.disabled = true;
             btn.style.opacity = '0.7';
 
-            // 2. Simulate Delay (1.5s)
+            // 2. Simulate Payment (1.5s)
             setTimeout(() => {
                 closeModal('paymentModal');
                 
