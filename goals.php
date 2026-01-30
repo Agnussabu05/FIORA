@@ -223,10 +223,23 @@ $userPoints = $stmt->fetchColumn();
                 </div>
             </div>
 
+            <!-- Filter Tabs -->
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="filter-tab active" data-filter="all" onclick="filterGoals('all', this)" style="padding: 10px 20px; border-radius: 12px; border: 2px solid var(--primary); background: var(--primary); color: white; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                    📋 All Goals
+                </button>
+                <button class="filter-tab" data-filter="active" onclick="filterGoals('active', this)" style="padding: 10px 20px; border-radius: 12px; border: 2px solid #ddd; background: white; color: #555; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                    🎯 Active (<?php echo $activeCount; ?>)
+                </button>
+                <button class="filter-tab" data-filter="completed" onclick="filterGoals('completed', this)" style="padding: 10px 20px; border-radius: 12px; border: 2px solid #ddd; background: white; color: #555; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                    ✅ Completed (<?php echo $completedCount; ?>)
+                </button>
+            </div>
+
             <div class="goals-grid">
                 <?php if (count($goals) > 0): ?>
                     <?php foreach ($goals as $goal): ?>
-                        <div class="goal-card <?php echo $goal['status'] === 'completed' ? 'completed' : ''; ?>">
+                        <div class="goal-card <?php echo $goal['status'] === 'completed' ? 'completed' : ''; ?>" data-status="<?php echo $goal['status']; ?>">
                             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                                 <span class="cat-tag" style="background: rgba(0,0,0,0.1); color: #000; font-weight: 800;"><?php echo htmlspecialchars($goal['category']); ?></span>
                                 <div style="display: flex; gap: 8px;">
@@ -429,6 +442,36 @@ $userPoints = $stmt->fetchColumn();
                     location.reload(); 
                 }
             } catch (err) { console.error(err); }
+        }
+
+        // Filter Goals Function
+        function filterGoals(filter, btn) {
+            // Update active tab styling
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.style.background = 'white';
+                tab.style.color = '#555';
+                tab.style.borderColor = '#ddd';
+                tab.classList.remove('active');
+            });
+            btn.style.background = 'var(--primary)';
+            btn.style.color = 'white';
+            btn.style.borderColor = 'var(--primary)';
+            btn.classList.add('active');
+
+            // Filter goal cards
+            const cards = document.querySelectorAll('.goal-card');
+            cards.forEach(card => {
+                const status = card.getAttribute('data-status');
+                if (filter === 'all') {
+                    card.style.display = '';
+                } else if (filter === 'active' && status === 'active') {
+                    card.style.display = '';
+                } else if (filter === 'completed' && status === 'completed') {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         }
     </script>
 </body>

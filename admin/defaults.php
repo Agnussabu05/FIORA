@@ -76,7 +76,7 @@ if (isset($_POST['sync_defaults'])) {
 }
 
 // Fetch Current Defaults
-$defaults = $pdo->query("SELECT * FROM system_defaults ORDER BY type ASC, created_at DESC")->fetchAll();
+$defaults = $pdo->query("SELECT * FROM system_defaults ORDER BY type ASC, id DESC")->fetchAll();
 
 $page = 'defaults';
 ?>

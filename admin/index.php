@@ -219,6 +219,15 @@ try {
         $active_group_members[$ag['id']] = $stmt->fetchAll();
     }
     
+    // Forming Groups (Not yet submitted for verification)
+    $forming_groups_list = $pdo->query("SELECT * FROM study_groups WHERE status = 'forming' AND (rejection_reason IS NULL OR rejection_reason = '') ORDER BY created_at DESC")->fetchAll();
+    $forming_group_members = [];
+    foreach ($forming_groups_list as $fg) {
+        $stmt = $pdo->prepare("SELECT u.username, sgm.role, u.id as user_id FROM study_group_members sgm JOIN users u ON sgm.user_id = u.id WHERE sgm.group_id = ?");
+        $stmt->execute([$fg['id']]);
+        $forming_group_members[$fg['id']] = $stmt->fetchAll();
+    }
+    
     // System Logs
     $logs = $pdo->query("
         SELECT l.*, u.username 
@@ -680,6 +689,52 @@ $tab = $_GET['tab'] ?? 'dashboard';
                                         </div>
                                     </div>
                                     <div style="font-size: 0.7rem; color: #999; font-weight: 600; text-transform: uppercase;">Active since: <?php echo date('M j, Y', strtotime($group['created_at'])); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Forming Groups (Not yet submitted for verification) -->
+                    <?php if ($tab == 'study' && count($forming_groups_list) > 0): ?>
+                    <div style="margin-top: 40px; border-top: 2px solid rgba(0,0,0,0.05); padding-top: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="color: #6366f1; font-weight: 800;">🔧 Forming Groups (Not Yet Submitted)</h3>
+                            <span style="background: rgba(99, 102, 241, 0.1); color: #6366f1; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                                <?php echo count($forming_groups_list); ?> Drafts
+                            </span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+                            <?php foreach ($forming_groups_list as $group): ?>
+                                <div style="background: rgba(99, 102, 241, 0.05); padding: 20px; border-radius: 15px; border: 1px dashed rgba(99, 102, 241, 0.3);">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2px;">
+                                        <div style="font-weight: 700; font-size: 1.1rem;">🔧 <?php echo htmlspecialchars($group['name']); ?></div>
+                                        <form method="POST" onsubmit="return confirm('Permanently delete this forming tribe?');" style="margin:0;">
+                                            <input type="hidden" name="group_id" value="<?php echo $group['id']; ?>">
+                                            <button type="submit" name="delete_group" style="background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" title="Delete Tribe">🗑️</button>
+                                        </form>
+                                    </div>
+                                    <div style="font-weight: 600; color: var(--primary); font-size: 0.9rem; margin-bottom: 8px;">📖 <?php echo htmlspecialchars($group['subject'] ?: 'General'); ?></div>
+                                    
+                                    <div style="margin-bottom: 10px;">
+                                        <button type="button" onclick="this.nextElementSibling.classList.toggle('visible'); this.innerText = this.innerText.includes('View') ? 'Hide Personnel ↑' : 'View Personnel ↓';" 
+                                                style="background: none; border: none; color: var(--secondary); font-size: 0.75rem; font-weight: 800; cursor: pointer; padding: 0; margin-bottom: 5px; text-transform: uppercase;">
+                                            View Personnel ↓
+                                        </button>
+                                        <div class="personnel-list" style="margin-top: 10px;">
+                                            <?php foreach ($forming_group_members[$group['id']] as $member): ?>
+                                                <div style="font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; background: rgba(255,255,255,0.6); padding: 5px 10px; border-radius: 8px;">
+                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                        <span style="font-weight: 700;">👤 <?php echo htmlspecialchars($member['username']); ?></span>
+                                                        <span style="font-size: 0.65rem; opacity: 0.6; font-weight: 900; background: #fff; padding: 2px 6px; border-radius: 5px;"><?php echo strtoupper($member['role']); ?></span>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #6366f1; font-weight: 600; text-transform: uppercase;">Created: <?php echo date('M j, Y', strtotime($group['created_at'])); ?></div>
+                                    <div style="font-size: 0.7rem; color: #999; margin-top: 5px;">⏳ Awaiting leader to submit for verification</div>
                                 </div>
                             <?php endforeach; ?>
                         </div>

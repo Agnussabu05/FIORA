@@ -207,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $msgContent = "🤝 $username has borrowed your book '{$book['title']}'. It is due on " . date('M d, Y', strtotime($due_date));
             } else {
                 if ($book['price'] > 0) {
-                    $msgContent = "💰 Cha-ching! $username just bought your book '{$book['title']}' for ₹{$book['price']}.";
+                    $msgContent = "💰 $username just bought your book '{$book['title']}' for ₹{$book['price']}.";
                 } else {
                     $msgContent = "🎁 Gift! $username claimed your free book '{$book['title']}'.";
                 }
@@ -1260,7 +1260,7 @@ function getBookDarkColor($title) {
     <div class="modal" id="sellerModal">
         <div class="modal-content" style="width: 500px;">
             <h3 style="margin-bottom: 5px;" id="sellerModalTitle">Book Title</h3>
-            <div style="margin-bottom: 20px; color: #666; font-size: 0.9rem;">
+            <div style="margin-bottom: 15px; color: #666; font-size: 0.9rem;">
                 <span id="sellerModalAuthor">Author</span> • <span id="sellerModalPages">0 pages</span>
             </div>
             <p style="margin-bottom: 15px; font-size: 0.95rem; font-weight: 600;">Available Options:</p>
@@ -1307,7 +1307,6 @@ function getBookDarkColor($title) {
         </div>
     </div>
 
-    <!-- MODAL: Sell Book -->
     <div class="modal" id="sellBookModal">
         <div class="modal-content">
             <h3>Sell a Book 💰</h3>
@@ -1362,6 +1361,8 @@ function getBookDarkColor($title) {
             </form>
         </div>
     </div>
+
+
 
     <!-- MODAL: Lend Book -->
     <div class="modal" id="lendBookModal">
@@ -1968,7 +1969,15 @@ function getBookDarkColor($title) {
             }
         }
 
-        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function openModal(id) { 
+            // Show popup alert for sell/lend modals
+            if (id === 'sellBookModal') {
+                alert('📚 Note: You are listing a pre-owned/used book for sale. Buyers will be notified that this is a used item.');
+            } else if (id === 'lendBookModal') {
+                alert('📚 Note: You are listing a pre-owned/used book for lending.');
+            }
+            document.getElementById(id).classList.add('active'); 
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         
         async function updateProgress(bookId, currentPage) {
@@ -2064,6 +2073,9 @@ function getBookDarkColor($title) {
         }
 
         function openSellerModal(copies) {
+            // Show popup alert for buyers about used book
+            alert('📦 Note: This is a pre-owned/used book.');
+            
             if (copies.length > 0) {
                 document.getElementById('sellerModalTitle').innerText = copies[0].title;
                 document.getElementById('sellerModalAuthor').innerText = copies[0].author || 'Unknown';

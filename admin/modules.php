@@ -110,6 +110,21 @@ $page = 'modules';
                         <?php if (strtolower($displayName) === 'mood' && $mod['setting_value'] == '1'): ?>
                             <a href="mood_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
                         <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'finance' && $mod['setting_value'] == '1'): ?>
+                            <a href="finance_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'tasks' && $mod['setting_value'] == '1'): ?>
+                            <a href="tasks_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'habits' && $mod['setting_value'] == '1'): ?>
+                            <a href="habits_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'goals' && $mod['setting_value'] == '1'): ?>
+                            <a href="goals_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
+                        <?php if (strtolower($displayName) === 'study' && $mod['setting_value'] == '1'): ?>
+                            <a href="study_users.php" class="toggle-btn" style="background: var(--primary); color: white; text-decoration: none; display: inline-block; text-align: center; margin-left: 10px;">Manage</a>
+                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 </div>

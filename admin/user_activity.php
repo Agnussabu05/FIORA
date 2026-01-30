@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 $page = 'user_activity';
 
 // Aggregated Activity Feed Query
-// We combine Moods, Books, and System Logs (and potentially Tasks)
+// We combine Moods, Books, and Tasks
 $sql = "
     SELECT * FROM (
         -- 1. Mood Logs
@@ -36,7 +36,6 @@ $sql = "
             CONCAT(UPPER(bt.type), ' book for ₹', bt.price) as description,
             (SELECT title FROM books WHERE id = bt.book_id) as details
         FROM book_transactions bt
-        -- For transactions, we usually track the 'actor' (Buyer or Borrower)
         JOIN users u ON bt.buyer_id = u.id
 
         UNION ALL
@@ -52,19 +51,6 @@ $sql = "
         FROM tasks t
         JOIN users u ON t.user_id = u.id
         WHERE u.username != 'demo'
-
-        UNION ALL
-
-        -- 4. System Logs (General)
-        SELECT 
-            sl.created_at as activity_time,
-            'system' as type,
-            u.username,
-            u.email,
-            sl.action as description,
-            sl.details as details
-        FROM system_logs sl
-        JOIN users u ON sl.user_id = u.id
     ) as activity_feed
     ORDER BY activity_time DESC
     LIMIT 50

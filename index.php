@@ -50,6 +50,9 @@ $user_habits = $stmt->fetchAll();
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo time(); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        .modal.active { display: flex !important; }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -116,7 +119,7 @@ $user_habits = $stmt->fetchAll();
                     <a href="generate_report.php" target="_blank" class="btn" style="background: white; border: 1px solid #cbd5e1; color: var(--text-main); font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                         📄 Report
                     </a>
-                    <button class="btn btn-primary" onclick="alert('Quick add feature coming soon!')">+ Quick Add</button>
+                    <button class="btn btn-primary" onclick="document.getElementById('quickAddModal').classList.add('active')">+ Quick Add</button>
                     
                     <!-- Profile Button (Requested) -->
                     <a href="profile.php" class="btn" style="background: white; border: 1px solid #e2e8f0; color: var(--text-main); text-decoration: none; display: flex; align-items: center; gap: 5px;">
@@ -306,6 +309,64 @@ $user_habits = $stmt->fetchAll();
             </div>
 
         </main>
+    </div>
+
+    <!-- Quick Add Modal -->
+    <div class="modal" id="quickAddModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;" onclick="if(event.target==this)this.classList.remove('active')">
+        <div class="glass-card" style="width: 400px; padding: 30px; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h3 style="margin: 0;">⚡ Quick Add</h3>
+                <button onclick="document.getElementById('quickAddModal').classList.remove('active')" style="background: none; border: none; font-size: 1.2rem; cursor: pointer;">✕</button>
+            </div>
+            
+            <p style="color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">What would you like to add?</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Add Task -->
+                <a href="tasks.php?action=add" style="text-decoration: none;">
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 15px 20px; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border: 1px solid #86efac; border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
+                        <div style="width: 45px; height: 45px; background: #22c55e; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: white;">✅</div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 700; color: #166534; font-size: 1rem;">New Task</div>
+                            <div style="font-size: 0.8rem; color: #15803d;">Add a task to your to-do list</div>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Add Habit -->
+                <a href="habits.php" style="text-decoration: none;">
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 15px 20px; background: linear-gradient(135deg, #fef3c7, #fde68a); border: 1px solid #fcd34d; border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
+                        <div style="width: 45px; height: 45px; background: #f59e0b; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: white;">🔥</div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 700; color: #92400e; font-size: 1rem;">New Habit</div>
+                            <div style="font-size: 0.8rem; color: #b45309;">Track a new daily habit</div>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Add Transaction -->
+                <a href="finance.php" style="text-decoration: none;">
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 15px 20px; background: linear-gradient(135deg, #ede9fe, #ddd6fe); border: 1px solid #c4b5fd; border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
+                        <div style="width: 45px; height: 45px; background: #8b5cf6; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: white;">💰</div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 700; color: #5b21b6; font-size: 1rem;">New Transaction</div>
+                            <div style="font-size: 0.8rem; color: #6d28d9;">Log income or expense</div>
+                        </div>
+                    </div>
+                </a>
+                
+                <!-- Add Goal -->
+                <a href="goals.php" style="text-decoration: none;">
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 15px 20px; background: linear-gradient(135deg, #fce7f3, #fbcfe8); border: 1px solid #f9a8d4; border-radius: 12px; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(5px)'" onmouseout="this.style.transform='translateX(0)'">
+                        <div style="width: 45px; height: 45px; background: #ec4899; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: white;">🎯</div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 700; color: #9d174d; font-size: 1rem;">New Goal</div>
+                            <div style="font-size: 0.8rem; color: #be185d;">Set a new ambition</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
     </div>
 
     <script>

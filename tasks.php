@@ -977,6 +977,26 @@ $upcoming_tasks = $upcoming_stmt->fetchAll();
                 }
                 return false;
             } else {
+                // Additional validation for deadline - check if it's in the past
+                if (field.name === 'deadline') {
+                    const selectedDate = new Date(field.value.replace(' ', 'T'));
+                    const now = new Date();
+                    
+                    if (selectedDate < now) {
+                        clearError(field); // Clear any existing error first
+                        const error = document.createElement('div');
+                        error.className = 'error-message';
+                        error.style.color = '#ef4444';
+                        error.style.fontSize = '0.85rem';
+                        error.style.marginTop = '5px';
+                        error.style.fontWeight = '600';
+                        error.innerText = '⚠️ This deadline has already passed. Please select a future date and time.';
+                        field.parentNode.appendChild(error);
+                        field.style.borderColor = '#ef4444';
+                        return false;
+                    }
+                }
+                
                 clearError(field);
                 return true;
             }
