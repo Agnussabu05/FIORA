@@ -10,7 +10,11 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 $username = $_SESSION['username'];
+$user_id = $_SESSION['user_id'];
+$username = $_SESSION['username'];
 $group_id = $_GET['id'] ?? 0;
+$schedule_error = null;
+$schedule_data = [];
 
 // 1. Verify Membership & Fetch Group Details
 $stmt = $pdo->prepare("
@@ -86,19 +90,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $time = $_POST['scheduled_time'];
         $title = trim($_POST['session_title'] ?: 'Study Session');
         
-        // Basic validation
-        if (strpos($url, 'meet.google.com') !== false || strpos($url, 'zoom.us') !== false) {
-            $pdo->prepare("INSERT INTO study_group_sessions (group_id, title, meet_link, scheduled_at) VALUES (?, ?, ?, ?)")
-                ->execute([$group_id, $title, $url, $time]);
-            
-            // Announce
-            $prettyTime = date('M j, g:i A', strtotime($time));
-            $sysMsg = "📅 New Session Scheduled: '$title' for $prettyTime";
-            $pdo->prepare("INSERT INTO study_group_messages (group_id, user_id, message) VALUES (?, ?, ?)")
-                ->execute([$group_id, $user_id, $sysMsg]);
+        // Validate Time (Prevent Past)
+        if (strtotime($time) < time()) {
+             $schedule_error = "❌ Cannot schedule a session in the past!";
+             $schedule_data = $_POST;
+             // Do not redirect, let page render to show error
+        } else {
+            // Basic validation
+            if (strpos($url, 'meet.google.com') !== false || strpos($url, 'zoom.us') !== false) {
+                $pdo->prepare("INSERT INTO study_group_sessions (group_id, title, meet_link, scheduled_at) VALUES (?, ?, ?, ?)")
+                    ->execute([$group_id, $title, $url, $time]);
+                
+                // Announce
+                $prettyTime = date('M j, g:i A', strtotime($time));
+                $sysMsg = "📅 New Session Scheduled: '$title' for $prettyTime";
+                $pdo->prepare("INSERT INTO study_group_messages (group_id, user_id, message) VALUES (?, ?, ?)")
+                    ->execute([$group_id, $user_id, $sysMsg]);
+            }
+            header("Location: tribe.php?id=$group_id");
+            exit;
         }
-        header("Location: tribe.php?id=$group_id");
-        exit;
     }
     
     // (Old End Meet logic removed/deprecated)
@@ -507,15 +518,21 @@ $page = 'study';
             <p style="color: #64748b; font-size: 0.9rem;">Plan a future study session for your tribe.</p>
             
             <form method="POST">
+                <?php if ($schedule_error): ?>
+                    <div style="background: #fee2e2; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; font-weight: 700;">
+                        <?php echo $schedule_error; ?>
+                    </div>
+                <?php endif; ?>
+
                 <div style="margin-bottom: 20px;">
                     <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 6px;">SESSION TITLE</label>
-                    <input type="text" name="session_title" placeholder="e.g. Chapter 4 Review" style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 15px;">
+                    <input type="text" name="session_title" placeholder="e.g. Chapter 4 Review" style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 15px;" value="<?php echo htmlspecialchars($schedule_data['session_title'] ?? ''); ?>">
 
                     <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 6px;">MEET LINK</label>
-                    <input type="text" name="meet_url" placeholder="Paste meet.google.com link..." required style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 15px;">
+                    <input type="text" name="meet_url" placeholder="Paste meet.google.com link..." required style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 15px;" value="<?php echo htmlspecialchars($schedule_data['meet_url'] ?? ''); ?>">
                     
                     <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #64748b; margin-bottom: 6px;">DATE & TIME</label>
-                    <input type="datetime-local" name="scheduled_time" required style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit;">
+                    <input type="datetime-local" name="scheduled_time" required style="width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit;" value="<?php echo htmlspecialchars($schedule_data['scheduled_time'] ?? ''); ?>">
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button type="button" onclick="document.getElementById('scheduleModal').style.display='none'" class="btn" style="background: #f1f5f9; color: #475569;">Cancel</button>
@@ -539,6 +556,65 @@ $page = 'study';
                 preview.style.display = 'none';
             }
         }
+        
+        // Real-time Validation (Required + Date)
+        function validateTribeField(input) {
+            const errorId = input.id + '-error';
+            let errorEl = document.getElementById(errorId);
+            if (!errorEl) {
+                errorEl = document.createElement('div');
+                errorEl.id = errorId;
+                errorEl.style.color = '#ef4444';
+                errorEl.style.fontSize = '0.85rem';
+                errorEl.style.marginTop = '4px';
+                errorEl.style.fontWeight = '600';
+                input.parentNode.appendChild(errorEl);
+            }
+
+            errorEl.innerText = '';
+            input.style.borderColor = '';
+            
+            const val = input.value.trim();
+
+            // 1. Mandatory Check
+            if (input.hasAttribute('required') && !val) {
+                 errorEl.innerText = '⚠️ This field is mandatory!';
+                 input.style.borderColor = '#ef4444';
+                 return;
+            }
+            
+            if(!val) return;
+
+            // 2. Date Check
+            if (input.type === 'datetime-local') {
+                const selected = new Date(val);
+                const now = new Date();
+                if (selected < now) {
+                    errorEl.innerText = '⚠️ strictly no past time allowd!';
+                    input.style.borderColor = '#ef4444';
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+             // Attach validation to all fields in the schedule form
+            const form = document.querySelector('form');
+            if (form) {
+                const inputs = form.querySelectorAll('input, select, textarea');
+                inputs.forEach(inp => {
+                    // Ensure ID for error mapping
+                    if(!inp.id) inp.id = 'field_' + Math.random().toString(36).substr(2, 9);
+                    
+                    inp.addEventListener('input', () => validateTribeField(inp));
+                    inp.addEventListener('blur', () => validateTribeField(inp));
+                    inp.addEventListener('change', () => validateTribeField(inp));
+                });
+            }
+        });
+
+        <?php if ($schedule_error): ?>
+            document.getElementById('scheduleModal').style.display='flex';
+        <?php endif; ?>
     </script>
 </body>
 </html>

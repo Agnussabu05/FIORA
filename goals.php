@@ -5,6 +5,10 @@ require_once 'includes/auth.php';
 $page = 'goals';
 $user_id = $_SESSION['user_id'];
 $username = $_SESSION['username'];
+$goal_error = null;
+$goal_data = [];
+$edit_goal_error = null;
+$edit_goal_data = [];
 
 // Points System & Quotes
 $quotes = [
@@ -29,16 +33,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $target = $_POST['target_date'];
         
         if ($target < date('Y-m-d')) {
-            echo "<script>alert('❌ You cannot set a goal in the past! Please choose a future date.'); window.location.href='goals.php';</script>";
+            $goal_error = "❌ You cannot set a goal in the past! Please choose a future date.";
+            $goal_data = $_POST;
+        } else {
+            $cat = $_POST['category'];
+            
+            $stmt = $pdo->prepare("INSERT INTO goals (user_id, title, description, target_date, category) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$user_id, $title, $desc, $target, $cat]);
+            header("Location: goals.php");
             exit;
         }
-
-        $cat = $_POST['category'];
-        
-        $stmt = $pdo->prepare("INSERT INTO goals (user_id, title, description, target_date, category) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$user_id, $title, $desc, $target, $cat]);
-        header("Location: goals.php");
-        exit;
     }
     
     if ($action === 'edit') {
@@ -48,10 +52,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $target = $_POST['target_date'];
         $cat = $_POST['category'];
         
-        $stmt = $pdo->prepare("UPDATE goals SET title = ?, description = ?, target_date = ?, category = ? WHERE id = ? AND user_id = ?");
-        $stmt->execute([$title, $desc, $target, $cat, $id, $user_id]);
-        header("Location: goals.php");
-        exit;
+        if ($target < date('Y-m-d')) {
+             $edit_goal_error = "❌ Target date cannot be in the past.";
+             $edit_goal_data = $_POST;
+             // No redirect, fall through to render page
+        } else {
+            $stmt = $pdo->prepare("UPDATE goals SET title = ?, description = ?, target_date = ?, category = ? WHERE id = ? AND user_id = ?");
+            $stmt->execute([$title, $desc, $target, $cat, $id, $user_id]);
+            header("Location: goals.php");
+            exit;
+        }
     }
     
     if ($action === 'toggle_status') {
@@ -289,28 +299,34 @@ $userPoints = $stmt->fetchColumn();
             <h3 style="margin-bottom: 25px;">Set New Ambition</h3>
             <form action="goals.php" method="POST">
                 <input type="hidden" name="action" value="add">
+                
+                <?php if ($goal_error): ?>
+                    <div style="background: #fee2e2; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; font-weight: 700;">
+                        <?php echo $goal_error; ?>
+                    </div>
+                <?php endif; ?>
+
                 <div class="form-group">
                     <label>What do you want to achieve?</label>
-                    <input type="text" name="title" class="form-input" required placeholder="Launch Website, Run 10km...">
+                    <input type="text" name="title" class="form-input" required placeholder="Launch Website, Run 10km..." value="<?php echo htmlspecialchars($goal_data['title'] ?? ''); ?>">
                 </div>
                 <div class="form-group">
                     <label>A brief description (Why is this important?)</label>
-                    <textarea name="description" class="form-input" rows="2" placeholder="To improve my career prospects..."></textarea>
+                    <textarea name="description" class="form-input" rows="2" placeholder="To improve my career prospects..."><?php echo htmlspecialchars($goal_data['description'] ?? ''); ?></textarea>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div class="form-group">
                         <label>Target Date</label>
-                        <input type="date" name="target_date" class="form-input" min="<?php echo date('Y-m-d'); ?>" required>
+                        <input type="date" name="target_date" class="form-input" required value="<?php echo htmlspecialchars($goal_data['target_date'] ?? ''); ?>">
                     </div>
-
 
                     <div class="form-group">
                         <label>Category</label>
                         <select name="category" class="form-input">
-                            <option value="Personal">Personal</option>
-                            <option value="Career">Career</option>
-                            <option value="Health">Health</option>
-                            <option value="Finance">Finance</option>
+                            <option value="Personal" <?php echo ($goal_data['category'] ?? '') === 'Personal' ? 'selected' : ''; ?>>Personal</option>
+                            <option value="Career" <?php echo ($goal_data['category'] ?? '') === 'Career' ? 'selected' : ''; ?>>Career</option>
+                            <option value="Health" <?php echo ($goal_data['category'] ?? '') === 'Health' ? 'selected' : ''; ?>>Health</option>
+                            <option value="Finance" <?php echo ($goal_data['category'] ?? '') === 'Finance' ? 'selected' : ''; ?>>Finance</option>
                         </select>
                     </div>
                 </div>
@@ -329,6 +345,13 @@ $userPoints = $stmt->fetchColumn();
             <form action="goals.php" method="POST">
                 <input type="hidden" name="action" value="edit">
                 <input type="hidden" name="goal_id" id="edit_goal_id">
+                
+                <?php if ($edit_goal_error): ?>
+                    <div style="background: #fee2e2; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; font-weight: 700;">
+                        <?php echo $edit_goal_error; ?>
+                    </div>
+                <?php endif; ?>
+
                 <div class="form-group">
                     <label>What do you want to achieve?</label>
                     <input type="text" name="title" id="edit_title" class="form-input" required placeholder="Launch Website, Run 10km...">
@@ -473,6 +496,80 @@ $userPoints = $stmt->fetchColumn();
                 }
             });
         }
+
+
+        // Real-time Validation (Required + Date)
+        function validateGoalField(input) {
+            const errorId = input.id + '-error';
+            let errorEl = document.getElementById(errorId);
+            if (!errorEl) {
+                errorEl = document.createElement('div');
+                errorEl.id = errorId;
+                errorEl.style.color = '#ef4444';
+                errorEl.style.fontSize = '0.85rem';
+                errorEl.style.marginTop = '4px';
+                errorEl.style.fontWeight = '600';
+                input.parentNode.appendChild(errorEl);
+            }
+
+            // Reset
+            errorEl.innerText = '';
+            input.style.borderColor = '';
+            
+            const val = input.value.trim();
+
+            // 1. Mandatory Check
+            if (input.hasAttribute('required') && !val) {
+                 errorEl.innerText = '⚠️ This field is mandatory!';
+                 input.style.borderColor = '#ef4444';
+                 return;
+            }
+            
+            if(!val) return;
+            
+            // 2. Date Check
+            if (input.type === 'date') {
+                const selected = new Date(val);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                if (selected < today) {
+                    errorEl.innerText = '⚠️ strictly no past time allowd!';
+                    input.style.borderColor = '#ef4444';
+                }
+            }
+        }
+
+        // Attach listeners
+        document.addEventListener('DOMContentLoaded', () => {
+             // Attach validation to all fields in Add/Edit forms
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                const inputs = form.querySelectorAll('input, select, textarea');
+                inputs.forEach(inp => {
+                    inp.addEventListener('input', () => validateGoalField(inp));
+                    inp.addEventListener('blur', () => validateGoalField(inp));
+                    inp.addEventListener('change', () => validateGoalField(inp));
+                });
+            });
+        });
+
+        // Auto-open modals on error
+        <?php if ($goal_error): ?>
+            openModal();
+        <?php endif; ?>
+
+        <?php if ($edit_goal_error): ?>
+            // Show Edit Modal with error and preserved data
+            document.getElementById('edit_goal_id').value = <?php echo json_encode($edit_goal_data['goal_id']); ?>;
+            document.getElementById('edit_title').value = <?php echo json_encode($edit_goal_data['title']); ?>;
+            document.getElementById('edit_description').value = <?php echo json_encode($edit_goal_data['description']); ?>;
+            document.getElementById('edit_target_date').value = <?php echo json_encode($edit_goal_data['target_date']); ?>;
+            document.getElementById('edit_category').value = <?php echo json_encode($edit_goal_data['category']); ?>;
+            
+            const em = document.getElementById('editModal');
+            em.style.display = 'flex';
+            setTimeout(() => em.classList.add('open'), 10);
+        <?php endif; ?>
     </script>
 </body>
 </html>

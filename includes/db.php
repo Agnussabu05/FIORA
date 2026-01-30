@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Kolkata');
 $host = 'localhost';
 $pdo = null; // Initialize to avoid undefined variable warnings
 $dbname = 'fiora_db';

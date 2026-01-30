@@ -217,11 +217,17 @@ foreach ($allHabitStatus as $status) {
                                     <?php for ($d = 1; $d <= $daysInMonth; $d++): 
                                         $cellDate = "$year-" . str_pad($month, 2, '0', STR_PAD_LEFT) . "-" . str_pad($d, 2, '0', STR_PAD_LEFT);
                                         $isDone = isset($logsByHabit[$habit['id']]) && in_array($cellDate, $logsByHabit[$habit['id']]);
+                                        $creationDate = date('Y-m-d', strtotime($habit['created_at']));
+                                        $isActivatable = ($cellDate >= $creationDate);
                                     ?>
                                         <td>
-                                            <div class="check-dot <?php echo $isDone ? 'completed' : ''; ?>" 
-                                                 onclick="toggleHabit(this, <?php echo $habit['id']; ?>, '<?php echo $cellDate; ?>')">
-                                            </div>
+                                            <?php if ($isActivatable): ?>
+                                                <div class="check-dot <?php echo $isDone ? 'completed' : ''; ?>" 
+                                                     onclick="toggleHabit(this, <?php echo $habit['id']; ?>, '<?php echo $cellDate; ?>')">
+                                                </div>
+                                            <?php else: ?>
+                                                <div style="width: 22px; height: 22px; display: inline-block;"></div>
+                                            <?php endif; ?>
                                         </td>
                                     <?php endfor; ?>
                                 </tr>

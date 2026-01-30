@@ -797,6 +797,7 @@ if ($tab === 'bills') {
                 dateFormat: "Y-m-d",
                 altInput: true,
                 altFormat: "F j, Y",
+                maxDate: "today",
                 onReady: function(selectedDates, dateStr, instance) {
                     const btn = document.createElement("button");
                     btn.type = "button"; 
